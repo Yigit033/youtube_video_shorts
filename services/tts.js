@@ -83,13 +83,13 @@ class TTSService {
 
   getTTSMethods() {
     if (this.isProduction) {
-      // Production: Edge TTS → Local → Fallback
+      // Production: Say TTS → Local → Fallback
       return [
         {
-          name: 'Edge TTS (Microsoft)',
+          name: 'Say TTS (Cross-platform)',
           skip: () => false,
           func: async (text, outputPath) => {
-            return await this.generateWithEdgeTTS(text, outputPath);
+            return await this.generateWithSayTTS(text, outputPath);
           }
         },
         {
@@ -114,7 +114,7 @@ class TTSService {
         }
       ];
     } else {
-      // Development: Windows TTS → Edge TTS → eSpeak → Fallback
+      // Development: Windows TTS → Say TTS → eSpeak → Fallback
       return [
         {
           name: 'Windows TTS',
@@ -124,10 +124,10 @@ class TTSService {
           }
         },
         {
-          name: 'Edge TTS (Microsoft)',
+          name: 'Say TTS (Cross-platform)',
           skip: () => false,
           func: async (text, outputPath) => {
-            return await this.generateWithEdgeTTS(text, outputPath);
+            return await this.generateWithSayTTS(text, outputPath);
           }
         },
         {
@@ -314,17 +314,24 @@ class TTSService {
     });
   }
 
-  // Edge TTS Implementation (Microsoft'ın Ücretsiz Servisi)
-  async generateWithEdgeTTS(text, outputPath) {
+  // Say TTS Implementation (Ücretsiz, Cross-platform)
+  async generateWithSayTTS(text, outputPath) {
     try {
-      const edgeTTS = require('edge-tts');
-      const voice = this.ttsVoice || 'en-US-Studio-O'; // Environment'dan al veya default kullan
+      const say = require('say');
       
-      await edgeTTS.edgeTTS(text, voice, outputPath);
-      console.log(`🎯 Edge TTS generated successfully with voice: ${voice}`);
-      return outputPath;
+      return new Promise((resolve, reject) => {
+        say.export(text, 'Microsoft David Desktop', 1.0, outputPath, (err) => {
+          if (err) {
+            console.error('Say TTS Error:', err.message);
+            reject(err);
+          } else {
+            console.log('🎯 Say TTS generated successfully');
+            resolve(outputPath);
+          }
+        });
+      });
     } catch (error) {
-      console.error('Edge TTS Error:', error.message);
+      console.error('Say TTS Error:', error.message);
       throw error;
     }
   }

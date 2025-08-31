@@ -51,7 +51,7 @@ class AIService {
       console.log('Sending request to HuggingFace API...');
       
       const response = await axios.post(
-        this.apiUrl,
+        'https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct',
         { 
           inputs: prompt,
           parameters: {
