@@ -10,7 +10,9 @@ RUN apk add --no-cache \
     curl \
     bash \
     git \
-    espeak
+    espeak \
+    festival \
+    flite
 
 # Install Ollama
 RUN curl -fsSL https://ollama.ai/install.sh | sh

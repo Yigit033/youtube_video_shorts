@@ -6,7 +6,9 @@ const { v4: uuidv4 } = require('uuid');
 class VideoService {
   constructor() {
     this.outputDir = path.join(__dirname, '..', 'temp', 'output');
+    this.subsDir = path.join(__dirname, '..', 'temp', 'subtitles');
     this.ensureOutputDir();
+    if (!fs.existsSync(this.subsDir)) fs.mkdirSync(this.subsDir, { recursive: true });
   }
 
   ensureOutputDir() {
@@ -89,14 +91,16 @@ class VideoService {
           fs.mkdirSync(this.outputDir, { recursive: true });
         }
         
-        // Filter out any invalid video files
-        const validClips = videoClips.filter(clip => {
-          if (!fs.existsSync(clip.path)) {
-            console.warn(`⚠️  Video file not found: ${clip.path}`);
-            return false;
-          }
-          return true;
-        });
+        // Filter out any invalid video files and sort by quality
+        const validClips = videoClips
+          .filter(clip => {
+            if (!fs.existsSync(clip.path)) {
+              console.warn(`⚠️  Video file not found: ${clip.path}`);
+              return false;
+            }
+            return true;
+          })
+          .sort((a, b) => (b.quality || 0) - (a.quality || 0)); // Sort by quality
         
         if (validClips.length === 0) {
           console.warn('No valid video clips found. Creating a color background instead.');
@@ -117,9 +121,10 @@ class VideoService {
         const filterComplex = [];
         const filterInputs = [];
         
-        // Process each video clip
+        // Process each video clip with advanced effects and fixed durations
+        const perClipDuration = 6; // seconds
         validClips.forEach((_, index) => {
-          // Scale and crop to 1080x1920
+          // Scale and crop to 1080x1920 with quality enhancement
           filterComplex.push({
             filter: 'scale',
             options: { w: 1080, h: 1920, force_original_aspect_ratio: 'increase' },
@@ -134,23 +139,61 @@ class VideoService {
             outputs: `cropped${index}`
           });
           
+          // Add color enhancement and stabilization
+          filterComplex.push({
+            filter: 'eq',
+            options: { brightness: 0.05, contrast: 1.1, saturation: 1.2 },
+            inputs: `cropped${index}`,
+            outputs: `enhanced${index}`
+          });
+          
+          // Add subtle zoom effect (Ken Burns)
+          filterComplex.push({
+            filter: 'zoompan',
+            options: { 
+              z: 'min(zoom+0.0015,1.5)', 
+              d: 300,
+              x: 'iw/2-(iw/zoom/2)',
+              y: 'ih/2-(ih/zoom/2)'
+            },
+            inputs: `enhanced${index}`,
+            outputs: `zoomed${index}`
+          });
+          
+          // Force duration per clip
+          filterComplex.push({
+            filter: 'tpad',
+            options: { stop_duration: perClipDuration },
+            inputs: `zoomed${index}`,
+            outputs: `dur${index}`
+          });
+
           filterComplex.push({
             filter: 'setpts',
             options: 'PTS-STARTPTS',
-            inputs: `cropped${index}`,
+            inputs: `dur${index}`,
             outputs: `v${index}`
           });
           
           filterInputs.push(`[v${index}]`);
         });
-        
-        // Add concat filter
-        filterComplex.push({
-          filter: 'concat',
-          options: { n: validClips.length, v: 1, a: 0 },
-          inputs: filterInputs,
-          outputs: ['outv']
-        });
+        // Crossfade between consecutive clips
+        // Apply xfade (0.5s) chain: v0, v1 -> xf0, then xf0 with v2 -> xf1, ...
+        let lastLabel = `v0`;
+        for (let idx = 1; idx < validClips.length; idx++) {
+          const outLabel = idx === validClips.length - 1 ? 'outv' : `xf${idx}`;
+          filterComplex.push({
+            filter: 'xfade',
+            options: { transition: 'fade', duration: 0.5, offset: idx * perClipDuration - 0.5 },
+            inputs: [lastLabel, `v${idx}`],
+            outputs: outLabel
+          });
+          lastLabel = outLabel;
+        }
+        if (validClips.length === 1) {
+          // If only one clip, map directly
+          filterComplex.push({ filter: 'null', inputs: 'v0', outputs: 'outv' });
+        }
         
         // Set up the command
         command
@@ -162,7 +205,7 @@ class VideoService {
             '-movflags', '+faststart',
             '-pix_fmt', 'yuv420p',
             '-r', '30',
-            '-t', '30',
+            '-t', String(Math.min(60, validClips.length * perClipDuration)),
             '-y'
           ])
           .output(montageOutput)
@@ -196,7 +239,7 @@ class VideoService {
   }
 
   createColorBackground(outputPath, resolve, reject) {
-    const duration = 30; // 30 seconds
+    const duration = 60; // 60 seconds
     const command = ffmpeg()
       .input('color=color=black:s=1080x1920')
       .inputOptions([
@@ -231,20 +274,38 @@ class VideoService {
       .run();
   }
 
+  // Generate subtitles with whisper.cpp if configured
+  async generateSubtitlesFromAudio(audioPath, baseName) {
+    try {
+      const whisperService = require('./whisperService');
+      return await whisperService.transcribeAudio(audioPath, baseName);
+    } catch (e) {
+      console.warn('⚠️ Subtitle generation failed:', e.message);
+      return null;
+    }
+  }
+
   async addAudioAndSubtitles(videoPath, audioPath, script, outputPath) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
         // Normalize all paths
         const normalizedVideoPath = path.normalize(videoPath);
         const normalizedAudioPath = audioPath ? path.normalize(audioPath) : null;
         const normalizedOutputPath = path.normalize(outputPath);
-        
+
         console.log(`🔧 FFmpeg paths:\n  Video: ${normalizedVideoPath}\n  Audio: ${normalizedAudioPath || 'none'}\n  Output: ${normalizedOutputPath}`);
-        
+
         // Ensure output directory exists
         const outputDir = path.dirname(normalizedOutputPath);
         if (!fs.existsSync(outputDir)) {
           fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        // Optional subtitles via whisper.cpp
+        let srtPath = null;
+        if (normalizedAudioPath) {
+          const baseName = path.basename(normalizedOutputPath, path.extname(normalizedOutputPath));
+          srtPath = await this.generateSubtitlesFromAudio(normalizedAudioPath, baseName);
         }
 
         // Create FFmpeg command
@@ -256,103 +317,36 @@ class VideoService {
             '-pix_fmt yuv420p',
             '-movflags +faststart',
             '-shortest',
-            '-y', // Overwrite output file if it exists
+            '-y',
             '-preset fast',
             '-crf 23',
             '-r 30',
-            '-t 30' // Limit to 30 seconds for Shorts
+            '-t 60'
           ]);
 
-        // Add audio if available
-        if (normalizedAudioPath && fs.existsSync(normalizedAudioPath)) {
-          command.input(normalizedAudioPath);
-          
-          // Set up complex filter for audio mixing
-          command.complexFilter([
-            // Scale and pad the video
-            {
-              filter: 'scale',
-              options: { w: 1080, h: 1920, force_original_aspect_ratio: 'decrease' },
-              inputs: '0:v',
-              outputs: 'scaled'
-            },
-            {
-              filter: 'pad',
-              options: { w: 1080, h: 1920, x: '(ow-iw)/2', y: '(oh-ih)/2' },
-              inputs: 'scaled',
-              outputs: 'padded'
-            },
-            // Process audio
-            {
-              filter: 'volume',
-              options: '1.0',
-              inputs: '1:a',
-              outputs: 'audio_out'
-            }
-          ]);
-          
-          // Map the outputs
-          command.outputOptions([
-            '-map', '[padded]',
-            '-map', '[audio_out]',
-            '-c:v', 'libx264',
-            '-c:a', 'aac',
-            '-shortest',
-            '-y',
-            '-pix_fmt', 'yuv420p',
-            '-movflags', '+faststart',
-            '-preset', 'fast',
-            '-crf', '23',
-            '-r', '30',
-            '-t', '30'
-          ]);
-        } else {
-          // No audio available, just process video
-          command.complexFilter([
-            {
-              filter: 'scale',
-              options: { w: 1080, h: 1920, force_original_aspect_ratio: 'decrease' },
-              inputs: '0:v',
-              outputs: 'scaled'
-            },
-            {
-              filter: 'pad',
-              options: { w: 1080, h: 1920, x: '(ow-iw)/2', y: '(oh-ih)/2' },
-              inputs: 'scaled',
-              outputs: 'padded'
-            }
-          ]);
-          
-          command.outputOptions([
-            '-map', '[padded]',
-            '-c:v', 'libx264',
-            '-y',
-            '-pix_fmt', 'yuv420p',
-            '-movflags', '+faststart',
-            '-preset', 'fast',
-            '-crf', '23',
-            '-r', '30',
-            '-t', '30'
-          ]);
+        // Build filters
+        const vfChain = [];
+        // Scale and pad video first
+        vfChain.push('scale=w=1080:h=1920:force_original_aspect_ratio=decrease');
+        vfChain.push('pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2');
+        // Burn subtitles if available
+        if (srtPath && fs.existsSync(srtPath)) {
+          // escape backslashes for Windows paths and use TikTok-style subtitles
+          const escapedSrt = srtPath.replace(/\\/g, '\\\\');
+          vfChain.push(`subtitles='${escapedSrt}':force_style='FontName=Arial,FontSize=48,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Shadow=1,Alignment=2,MarginV=100'`);
+        } else if (script && script.script) {
+          // fallback: simple one-line drawtext preview
+          const text = (script.script || '').replace(/\n/g, ' ').slice(0, 100).replace(/'/g, "\\'");
+          vfChain.push(`drawtext=text='${text}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.7:boxborderw=8:x=(w-text_w)/2:y=h-150`);
         }
 
-        // Add subtitles if script is provided
-        if (script && script.script) {
-          // Simple subtitles at the bottom of the video
-          command.videoFilters({
-            filter: 'drawtext',
-            options: {
-              text: script.script.substring(0, 100) + (script.script.length > 100 ? '...' : ''),
-              fontfile: 'Arial',
-              fontsize: 48,
-              fontcolor: 'white',
-              x: '(w-text_w)/2',
-              y: 'h-th-40', // 40px from bottom
-              shadowcolor: 'black',
-              shadowx: 2,
-              shadowy: 2
-            }
-          });
+        // Apply video filters
+        command.videoFilters(vfChain);
+
+        // Add audio if available and mix volume (narration + bg already mixed upstream)
+        if (normalizedAudioPath && fs.existsSync(normalizedAudioPath)) {
+          command.input(normalizedAudioPath);
+          command.outputOptions(['-map 0:v:0', '-map 1:a:0']);
         }
 
         // Set output path and run the command
@@ -385,7 +379,7 @@ class VideoService {
 
     // Split script into sentences for better subtitle timing
     const sentences = script.match(/[^\.!?]+[\.!?]+/g) || [script];
-    const duration = 30; // Total video duration
+    const duration = 60; // Total video duration
     const timePerSentence = duration / sentences.length;
     
     let subtitleFilter = '';

@@ -271,12 +271,24 @@ class YouTubeService {
       });
 
       const videoId = response.data.id;
-      console.log(`✅ Video uploaded successfully: https://youtube.com/watch?v=${videoId}`);
+      const videoUrl = `https://youtube.com/watch?v=${videoId}`;
+      const videoTitle = response.data.snippet.title;
+      
+      console.log('🎉 ===== YOUTUBE UPLOAD SUCCESSFUL! =====');
+      console.log(`📺 Video Title: ${videoTitle}`);
+      console.log(`🔗 Video URL: ${videoUrl}`);
+      console.log(`📊 Video ID: ${videoId}`);
+      console.log(`⏰ Upload Time: ${new Date().toLocaleString()}`);
+      console.log(`📱 Status: ${publishAt ? 'Scheduled for ' + new Date(publishAt).toLocaleString() : 'Published Now'}`);
+      console.log('==========================================');
       
       return {
         videoId,
-        url: `https://youtube.com/watch?v=${videoId}`,
-        title: response.data.snippet.title
+        url: videoUrl,
+        title: videoTitle,
+        status: publishAt ? 'scheduled' : 'published',
+        publishAt: publishAt || new Date().toISOString(),
+        message: `🎉 Video "${videoTitle}" successfully ${publishAt ? 'scheduled' : 'published'}!`
       };
 
     } catch (error) {

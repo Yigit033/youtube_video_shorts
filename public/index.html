@@ -55,10 +55,32 @@
             </div>
         </div>
 
+        <!-- Mode Selection -->
+        <div class="mb-8">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">
+                    <i class="fas fa-cogs mr-2 text-purple-600"></i>
+                    Choose Your Mode
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button id="ai-mode-btn" class="mode-btn p-6 border-2 border-blue-200 rounded-lg hover:border-blue-400 transition-all duration-200 bg-blue-50">
+                        <i class="fas fa-robot text-3xl text-blue-600 mb-3"></i>
+                        <h3 class="text-lg font-semibold text-gray-800">AI Generation</h3>
+                        <p class="text-sm text-gray-600">Create videos from scratch using AI prompts</p>
+                    </button>
+                    <button id="upload-mode-btn" class="mode-btn p-6 border-2 border-gray-200 rounded-lg hover:border-purple-400 transition-all duration-200">
+                        <i class="fas fa-upload text-3xl text-purple-600 mb-3"></i>
+                        <h3 class="text-lg font-semibold text-gray-800">Professional Upload</h3>
+                        <p class="text-sm text-gray-600">Upload your video and enhance it professionally</p>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Main Form -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Input Form -->
-            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+            <!-- AI Generation Form -->
+            <div id="ai-form" class="bg-white rounded-lg shadow-md p-6 card-hover">
                 <h2 class="text-2xl font-bold mb-6 text-gray-800">
                     <i class="fas fa-magic mr-2 text-purple-600"></i>
                     Generate YouTube Shorts
@@ -117,6 +139,171 @@
                     >
                         <i class="fas fa-rocket mr-2"></i>
                         Generate & Upload Shorts
+                    </button>
+                </form>
+            </div>
+
+            <!-- Professional Upload Form -->
+            <div id="upload-form" class="bg-white rounded-lg shadow-md p-6 card-hover hidden">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">
+                    <i class="fas fa-upload mr-2 text-purple-600"></i>
+                    Professional Video Enhancement
+                </h2>
+                
+                <form id="professional-form" class="space-y-6">
+                    <!-- Video Upload -->
+                    <div>
+                        <label for="video-upload" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-video mr-1 text-blue-500"></i>
+                            Upload Your Video
+                        </label>
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 transition-colors">
+                            <input type="file" id="video-upload" accept="video/*" class="hidden">
+                            <div id="upload-area" class="cursor-pointer">
+                                <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
+                                <p class="text-gray-600">Click to upload or drag & drop your video</p>
+                                <p class="text-sm text-gray-400 mt-1">MP4, AVI, MOV, MKV (Max 500MB)</p>
+                            </div>
+                            <div id="upload-preview" class="hidden">
+                                <video id="video-preview" class="w-full max-w-md mx-auto rounded-lg" controls></video>
+                                <div class="mt-2">
+                                    <span id="video-info" class="text-sm text-gray-600"></span>
+                                    <button type="button" id="remove-video" class="ml-2 text-red-600 hover:text-red-800">
+                                        <i class="fas fa-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Content Brief -->
+                    <div>
+                        <label for="content-brief" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-edit mr-1 text-green-500"></i>
+                            Content Brief
+                        </label>
+                        <textarea
+                            id="content-brief"
+                            name="contentBrief"
+                            rows="3"
+                            placeholder="Describe your video content, target audience, and goals..."
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                        ></textarea>
+                    </div>
+
+                    <!-- Target Format -->
+                    <div>
+                        <label for="target-format" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-expand-arrows-alt mr-1 text-orange-500"></i>
+                            Target Format
+                        </label>
+                        <select
+                            id="target-format"
+                            name="targetFormat"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                        >
+                            <option value="shorts">YouTube Shorts (9:16)</option>
+                            <option value="youtube">YouTube Video (16:9)</option>
+                            <option value="instagram">Instagram Reels (4:5)</option>
+                        </select>
+                    </div>
+
+                    <!-- Style Preferences -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-palette mr-1 text-pink-500"></i>
+                            Style Preferences
+                        </label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label for="music-style" class="block text-xs text-gray-600 mb-1">Music Style</label>
+                                <select id="music-style" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                                    <option value="auto">Auto-detect</option>
+                                    <option value="energetic">Energetic</option>
+                                    <option value="calm">Calm</option>
+                                    <option value="dramatic">Dramatic</option>
+                                    <option value="fun">Fun</option>
+                                    <option value="professional">Professional</option>
+                                    <option value="upbeat">Upbeat</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="music-selection" class="block text-xs text-gray-600 mb-1">Music Selection</label>
+                                <select id="music-selection" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                                    <option value="auto">Auto-generate based on mood</option>
+                                    <option value="none">No background music</option>
+                                    <option value="ambient">Ambient (Calm)</option>
+                                    <option value="upbeat">Upbeat (Energetic)</option>
+                                    <option value="dramatic">Dramatic</option>
+                                    <option value="professional">Professional</option>
+                                </select>
+                            </div>
+                            <div id="music-options-container" class="hidden">
+                                <label class="block text-xs text-gray-600 mb-1">Available Music</label>
+                                <div id="music-options-list" class="space-y-2 max-h-32 overflow-y-auto">
+                                    <!-- Music options will be loaded here -->
+                                </div>
+                            </div>
+                            <div>
+                                <label for="color-grading" class="block text-xs text-gray-600 mb-1">Color Grading</label>
+                                <select id="color-grading" class="w-full px-3 py-2 border border-gray-300 rounded text-sm">
+                                    <option value="auto">Auto-detect</option>
+                                    <option value="cinematic">Cinematic</option>
+                                    <option value="vibrant">Vibrant</option>
+                                    <option value="clean">Clean</option>
+                                    <option value="vintage">Vintage</option>
+                                    <option value="neon">Neon</option>
+                                    <option value="monochrome">Monochrome</option>
+                                    <option value="warm">Warm</option>
+                                    <option value="cool">Cool</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Advanced Options -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-cogs mr-1 text-indigo-500"></i>
+                            Advanced Options
+                        </label>
+                        <div class="space-y-3">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="add-subtitles" class="mr-2" checked>
+                                <label for="add-subtitles" class="text-sm text-gray-600">Add Motion Graphics Subtitles</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" id="add-music" class="mr-2" checked>
+                                <label for="add-music" class="text-sm text-gray-600">Add Intelligent Background Music</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" id="batch-export" class="mr-2" checked>
+                                <label for="batch-export" class="text-sm text-gray-600">Export to Multiple Formats</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Subtitle Style -->
+                    <div id="subtitle-options" class="hidden">
+                        <label for="subtitle-style" class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-closed-captioning mr-1 text-cyan-500"></i>
+                            Subtitle Style
+                        </label>
+                        <select id="subtitle-style" class="w-full px-4 py-3 border border-gray-300 rounded-lg">
+                            <option value="tiktok">TikTok Style</option>
+                            <option value="professional">Professional</option>
+                            <option value="cinematic">Cinematic</option>
+                            <option value="neon">Neon</option>
+                        </select>
+                    </div>
+
+                    <button
+                        type="submit"
+                        id="process-btn"
+                        class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                    >
+                        <i class="fas fa-magic mr-2"></i>
+                        Process & Enhance Video
                     </button>
                 </form>
             </div>
@@ -194,5 +381,34 @@
     </div>
 
     <script src="script.js"></script>
+
+    <!-- Upload Dialog -->
+    <div id="upload-dialog" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold mb-4">Upload to YouTube</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">Title</label>
+            <input id="ud-title" class="w-full border rounded px-3 py-2" placeholder="AI will suggest a title...">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">Description</label>
+            <textarea id="ud-description" rows="3" class="w-full border rounded px-3 py-2" placeholder="AI will write a description..."></textarea>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">Tags (comma separated)</label>
+            <input id="ud-tags" class="w-full border rounded px-3 py-2" placeholder="AI will propose tags...">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">Schedule (optional)</label>
+            <input id="ud-datetime" type="datetime-local" class="w-full border rounded px-3 py-2">
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-4">
+          <button id="ud-cancel" class="px-4 py-2 rounded border">Cancel</button>
+          <button id="ud-confirm" class="px-4 py-2 rounded bg-red-600 text-white">Upload</button>
+        </div>
+      </div>
+    </div>
 </body>
 </html>

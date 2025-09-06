@@ -24,20 +24,68 @@ class PexelsService {
     try {
       console.log(`🎬 Searching for videos: "${topic}"`);
       
-      const response = await axios.get(`${this.baseUrl}/videos/search`, {
-        params: {
-          query: topic,
-          per_page: count * 2, // Get more than needed for variety
-          orientation: 'portrait', // Vertical videos for Shorts
-          size: 'medium'
-        },
-        headers: {
-          'Authorization': this.apiKey
-        }
-      });
-
-      const videos = response.data.videos || [];
+      // Smart search queries based on topic content
+      let searchQueries = [topic];
       
+      if (topic.includes('house') && topic.includes('wife') && topic.includes('tea')) {
+        // Specific search for house/husband/wife scenarios
+        searchQueries = [
+          'couple working on house',
+          'husband wife home renovation',
+          'family construction project',
+          'couple building home',
+          'romantic home improvement'
+        ];
+      } else if (topic.includes('working') && topic.includes('house')) {
+        searchQueries = [
+          'home construction',
+          'house renovation',
+          'DIY home improvement',
+          'building house',
+          'home repair'
+        ];
+      } else if (topic.includes('cafe') || topic.includes('coffee') || topic.includes('tea')) {
+        searchQueries = [
+          'family cafe',
+          'people drinking coffee',
+          'cafe atmosphere',
+          'family restaurant',
+          'people eating together',
+          'coffee shop',
+          'tea time',
+          'family dining'
+        ];
+      }
+      
+      // Try multiple search queries for better results
+      let videos = [];
+      for (const query of searchQueries) {
+        try {
+          const response = await axios.get(`${this.baseUrl}/videos/search`, {
+            params: {
+              query: query,
+              per_page: count * 3, // Daha fazla video al
+              orientation: 'portrait',
+              size: 'large', // Daha yüksek kalite
+              min_duration: 10, // En az 10 saniye
+              max_duration: 60 // En fazla 60 saniye
+            },
+            headers: {
+              'Authorization': this.apiKey
+            }
+          });
+          
+          if (response.data.videos && response.data.videos.length > 0) {
+            videos = response.data.videos;
+            console.log(`✅ Found ${videos.length} videos for query: "${query}"`);
+            break;
+          }
+        } catch (queryError) {
+          console.warn(`Query "${query}" failed, trying next...`);
+          continue;
+        }
+      }
+
       if (videos.length === 0) {
         throw new Error(`No videos found for topic: ${topic}`);
       }

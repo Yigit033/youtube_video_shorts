@@ -1,44 +1,25 @@
+// Production Configuration
+// This file is loaded when NODE_ENV=production
+
 module.exports = {
-  // Production Environment Configuration
-  NODE_ENV: 'production',
-  PORT: process.env.PORT || 3000,
-
-  // YouTube API Configuration
-  YOUTUBE_CLIENT_ID: process.env.YOUTUBE_CLIENT_ID,
-  YOUTUBE_CLIENT_SECRET: process.env.YOUTUBE_CLIENT_SECRET,
-  YOUTUBE_REDIRECT_URI: process.env.YOUTUBE_REDIRECT_URI,
-
-  // Pexels API
-  PEXELS_API_KEY: process.env.PEXELS_API_KEY,
-
-  // HuggingFace (Optional)
-  HUGGINGFACE_API_KEY: process.env.HUGGINGFACE_API_KEY,
-
-  // TTS Priority (Production)
-  TTS_PRIORITY: 'edge,local,fallback',
-
-  // AI Priority (Production)
-  AI_PRIORITY: 'template,edge,fallback',
-
-  // TTS Configuration
-  TTS_PROVIDER: 'edge',
-  TTS_VOICE: 'en-US-Studio-O',
-
+  // AI Configuration
+  AI_PRIORITY: 'huggingface,template,fallback', // Ollama disabled in production
+  USE_LOCAL_AI: false,
+  
+  // TTS Configuration  
+  TTS_PRIORITY: 'huggingface,cross-platform,fallback',
+  TTS_PROVIDER: 'huggingface',
+  TTS_VOICE: 'auto',
+  
   // Security
-  RATE_LIMIT_WINDOW_MS: 900000, // 15 minutes
-  RATE_LIMIT_MAX_REQUESTS: 100,
-  CORS_ORIGIN: process.env.CORS_ORIGIN || 'https://yourdomain.com',
-
+  CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
+  RATE_LIMIT_WINDOW: 15 * 60 * 1000, // 15 minutes
+  RATE_LIMIT_MAX: 100, // 100 requests per window
+  
+  // YouTube
+  YOUTUBE_REDIRECT_URI: process.env.YOUTUBE_REDIRECT_URI,
+  
   // Logging
   LOG_LEVEL: 'info',
-  LOG_FILE: 'logs/app.log',
-
-  // Performance
-  MAX_FILE_SIZE: 52428800, // 50MB
-  REQUEST_TIMEOUT: 30000,
-
-  // Health Check
-  HEALTH_CHECK_INTERVAL: 30000,
-  HEALTH_CHECK_TIMEOUT: 3000,
-  HEALTH_CHECK_RETRIES: 3
+  ENABLE_REQUEST_LOGGING: true
 };

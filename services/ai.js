@@ -4,25 +4,19 @@ class AIService {
   constructor() {
     // Environment-based AI configuration
     this.isProduction = process.env.NODE_ENV === 'production';
-    this.useLocalAI = this.isProduction ? false : (process.env.USE_LOCAL_AI === 'true');
-    this.localAIModel = process.env.OLLAMA_MODEL || 'llama3';
-    this.localAIUrl = 'http://localhost:11434/api/generate';
+    this.useLocalAI = !this.isProduction && process.env.USE_LOCAL_AI === 'true'; // Ollama'yı sadece local'de ve USE_LOCAL_AI=true ise aktif et
+    this.localAIModel = process.env.OLLAMA_MODEL || 'llama3:8b';
+    this.localAIUrl = 'http://127.0.0.1:11434/api/generate';
     this.isBrowser = typeof window !== 'undefined';
+    this.apiKey = process.env.HUGGINGFACE_API_KEY;
     
-    if (this.useLocalAI && !this.isBrowser && !this.isProduction) {
-      console.log('🤖 AI Service: Using local AI with Ollama');
-      console.log('💡 Make sure Ollama is running: https://ollama.ai/');
-      console.log(`💡 Run: ollama pull ${this.localAIModel}`);
-      console.log('💡 If Ollama is not available, the system will fall back to template-based generation');
-    } else if (this.isProduction) {
-      console.log('🚀 AI Service: Production mode - Using template-based generation for stability');
-      this.useLocalAI = false;
-    } else if (this.isBrowser) {
-      console.log('🌐 Running in browser environment - Using template-based generation');
-      this.synth = window.speechSynthesis;
-      this.useLocalAI = false;
+    if (this.useLocalAI) {
+      console.log('🤖 AI Service: Using local AI with Ollama (llama3:8b)');
+      console.log('💡 Make sure Ollama is running: ollama serve');
+      console.log('💡 Model: llama3:8b (4.7 GB)');
+      console.log('💡 If Ollama fails, will fall back to high-quality templates');
     } else {
-      console.log('🤖 AI Service: Local AI is disabled - Using template-based generation');
+      console.log('🚀 AI Service: Production mode - Using template-based generation');
     }
   }
 
@@ -51,7 +45,7 @@ class AIService {
       console.log('Sending request to HuggingFace API...');
       
       const response = await axios.post(
-        'https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct',
+        'https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium',
         { 
           inputs: prompt,
           parameters: {
@@ -174,33 +168,74 @@ class AIService {
     }
     
     try {
-      const prompt = `Create a YouTube Shorts script about "${topic}" in JSON format: {
-        "script": "A short, engaging script (60-90 seconds) with a hook, 2-3 key points, and a call to action.",
-        "title": "Catchy title under 60 characters",
-        "hashtags": ["#shorts", "#${topic.replace(/\\s+/g, '')}", "#viral", "#trending"]
-      }`;
+      console.log('🤖 Ollama: Generating script with llama3:8b...');
+      
+      // Better prompt for llama3
+      const prompt = `Write a YouTube Shorts script about "${topic}". Return ONLY a JSON object with this exact structure:
+
+{
+  "script": "Write a natural, conversational script (60-90 seconds) that tells a story about ${topic}. Make it engaging and relatable.",
+  "title": "A catchy title under 60 characters",
+  "hashtags": ["#shorts", "#${topic.replace(/\\s+/g, '')}", "#viral"]
+}
+
+CRITICAL: Return ONLY the JSON object, no other text.`;
 
       const response = await axios.post(this.localAIUrl, {
         model: this.localAIModel,
         prompt: prompt,
-        stream: false,
-        format: 'json'
+        stream: false
       }, {
-        timeout: 30000 // 30 seconds timeout
+        timeout: 60000 // 60 seconds timeout
       });
 
+      console.log('✅ Ollama response received');
+      
       if (response.data?.response) {
-        const result = JSON.parse(response.data.response);
-        return {
-          script: result.script,
-          title: result.title,
-          description: `Check out this video about ${topic}!`,
-          hashtags: result.hashtags
-        };
+        const responseText = response.data.response.trim();
+        console.log('📝 Ollama raw response:', responseText.substring(0, 200) + '...');
+        
+        try {
+          // Try to extract JSON from response
+          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const jsonText = jsonMatch[0];
+            const result = JSON.parse(jsonText);
+            
+            console.log('✅ Ollama JSON parsed successfully');
+            return {
+              script: result.script || responseText,
+              title: result.title || `Beautiful Story About ${topic}`,
+              description: `A touching story about ${topic} that will warm your heart.`,
+              hashtags: result.hashtags || ['#shorts', '#love', '#home', '#viral']
+            };
+          } else {
+            // If no JSON, use the raw response as script
+            console.log('📝 Using Ollama raw response as script');
+            return {
+              script: responseText,
+              title: `Beautiful Story About ${topic}`,
+              description: `A touching story about ${topic} that will warm your heart.`,
+              hashtags: ['#shorts', '#love', '#home', '#viral']
+            };
+          }
+        } catch (parseError) {
+          console.log('⚠️ JSON parsing failed, using raw response');
+          return {
+            script: responseText,
+            title: `Beautiful Story About ${topic}`,
+            description: `A touching story about ${topic} that will warm your heart.`,
+            hashtags: ['#shorts', '#love', '#home', '#viral']
+          };
+        }
       }
-      throw new Error('Invalid response from Ollama');
+      
+      throw new Error('No response from Ollama');
     } catch (error) {
-      console.error('Ollama Error:', error.message);
+      console.error('❌ Ollama Error:', error.message);
+      if (error.code === 'ECONNREFUSED') {
+        console.log('💡 Ollama is not running. Start it with: ollama serve');
+      }
       throw error;
     }
   }
@@ -208,29 +243,52 @@ class AIService {
   // Generate a simple script without AI
   createFallbackScript(topic, aiText = '') {
     const cleanTopic = topic.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+    
+    // Create context-aware script based on topic
+    let script, title, description;
+    
+    if (aiText) {
+      script = aiText;
+      title = `Amazing Facts About ${topic} | Must Watch!`;
+      description = `Learn interesting facts about ${topic} in this short video!`;
+    } else if (topic.includes('house') && topic.includes('wife') && topic.includes('tea')) {
+      // Special handling for house/husband/wife scenarios
+      script = `In every home, there's a beautiful story of love and care. Picture this: a man working hard on his house, 
+      building dreams with his own hands. Meanwhile, his loving wife prepares a warm cup of tea, thinking of his comfort. 
+      And in the end, they share a beautiful moment together, embracing the love that makes their house a home. 
+      This is the magic of partnership and love.`;
+      title = `Love in the Little Things | Home Sweet Home`;
+      description = `A beautiful story about love, home, and the little moments that matter most.`;
+    } else if (topic.includes('working') && topic.includes('house')) {
+      script = `There's something special about working on your own house. Every nail, every board, every detail 
+      represents your dreams and hard work. It's not just construction - it's building a future, creating memories, 
+      and making a place where love can grow. The satisfaction of seeing your vision come to life is unmatched.`;
+      title = `Building Dreams | Home Construction`;
+      description = `The joy and satisfaction of working on your own house and building your dreams.`;
+    } else {
+      // Generic script for other topics
+      script = `Did you know that ${topic} has some amazing secrets? Let me share the top 3 facts that will blow your mind! 
+      First, this incredible topic has been fascinating people for years. Second, there are so many interesting aspects to explore. 
+      Third, you can learn so much more about this! What's your favorite fact about ${topic}? Let me know in the comments below!`;
+      title = `Amazing Facts About ${topic} | Must Watch!`;
+      description = `Learn interesting facts about ${topic} in this short video!`;
+    }
+    
     const hashtags = [
       `#${cleanTopic.replace(/\s+/g, '')}`,
       '#shorts',
       '#viral',
       '#trending',
-      '#facts',
-      '#amazing',
-      '#mindblown',
-      '#educational'
+      '#love',
+      '#home',
+      '#family',
+      '#amazing'
     ];
-    
-    const script = aiText || 
-      `Did you know that ${topic} has some amazing secrets? Let me share the top 3 facts that will blow your mind! 
-      First, this incredible topic has been fascinating people for years. Second, there are so many interesting aspects to explore. 
-      Third, you can learn so much more about this! What's your favorite fact about ${topic}? Let me know in the comments below!`;
 
     return {
       script: script.slice(0, 500), // Keep it short for TTS
-      title: `Amazing Facts About ${topic} | Must Watch!`,
-      description: `Learn interesting facts about ${topic} in this short video!\n\n` +
-                 `🔥 Subscribe for more amazing content!\n` +
-                 `📱 Follow us for daily facts!\n\n` +
-                 hashtags.join(' '),
+      title: title,
+      description: description + '\n\n🔥 Subscribe for more amazing content!\n📱 Follow us for daily facts!\n\n' + hashtags.join(' '),
       hashtags: hashtags
     };
   }
