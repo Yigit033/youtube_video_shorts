@@ -14,7 +14,9 @@ const pexelsService = require('./services/pexels');
 const PixabayService = require('./services/pixabay');
 const pixabayService = new PixabayService();
 const MusicService = require('./services/music');
-const musicService = new MusicService();
+const musicService = require('./services/music');
+const IntelligentMusicService = require('./services/intelligentMusicService');
+const intelligentMusicService = new IntelligentMusicService();
 const ImageGenerationService = require('./services/imageGeneration');
 const imageGenerationService = new ImageGenerationService();
 const VideoGenerationService = require('./services/videoGeneration');
@@ -22,6 +24,7 @@ const videoGenerationService = new VideoGenerationService();
 const EnhancedVideoGenerationService = require('./services/enhancedVideoGeneration');
 const enhancedVideoGenerationService = new EnhancedVideoGenerationService();
 const professionalVideoService = require('./services/professionalVideoService');
+const cleanupService = require('./services/cleanup');
 
 // Import routes
 const apiRoutes = require('./routes/api');
@@ -56,8 +59,20 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static('public'));
 
-// Store for tracking job progress
+// Store for tracking job progress (with automatic cleanup)
 const jobProgress = new Map();
+const JOB_RETENTION_TIME = 60 * 60 * 1000; // 1 hour
+
+// Clean up old jobs periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [jobId, job] of jobProgress.entries()) {
+    if (job.completedAt && (now - job.completedAt) > JOB_RETENTION_TIME) {
+      jobProgress.delete(jobId);
+      console.log(`🧹 Cleaned up old job: ${jobId}`);
+    }
+  }
+}, 30 * 60 * 1000); // Every 30 minutes
 
 // Use routes
 app.use('/api', apiRoutes);
@@ -67,6 +82,7 @@ app.use('/upload', uploadRoutes);
 // Serve temp files (videos, exports) for browser preview
 app.use('/temp', express.static(path.join(__dirname, 'temp')));
 
+
 // Serve dashboard
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -74,21 +90,25 @@ app.get('/', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  console.error('❌ Server error:', err);
   res.status(500).json({ 
     success: false, 
     error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
 });
 
-// Main routes
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
 // Generate and upload YouTube Shorts
 app.post('/api/generate-shorts', async (req, res) => {
-  const { topic, count = 1, publishDate } = req.body;
+  const { 
+    topic, 
+    count = 1, 
+    publishDate,
+    videoStyle = 'entertaining',
+    targetAudience = 'gen-z',
+    videoDuration = '30-45s',
+    mood = 'energetic',
+    ctaType = 'follow'
+  } = req.body;
   const jobId = `job_${Date.now()}`;
   
   // Initialize job progress
@@ -102,8 +122,9 @@ app.post('/api/generate-shorts', async (req, res) => {
 
   res.json({ jobId, message: 'Video generation started' });
 
-  // Start async processing
-  processVideosAsync(jobId, topic, count, publishDate);
+  // Start async processing with user preferences
+  const options = { videoStyle, targetAudience, videoDuration, mood, ctaType };
+  processVideosAsync(jobId, topic, count, publishDate, options);
 });
 
 // Generate image prompts from topic
@@ -413,74 +434,126 @@ function extractVisualKeywords(text) {
   } catch { return []; }
 }
 
-async function processVideosAsync(jobId, topic, count, publishDate) {
+async function processVideosAsync(jobId, topic, count, publishDate, options = {}) {
   const progress = jobProgress.get(jobId);
+  const tempFiles = []; // Track temp files for cleanup
   
   try {
     for (let i = 0; i < count; i++) {
       updateProgress(jobId, `Generating script for video ${i + 1}/${count}`, (i / count) * 20);
       
-      // Generate script using AI
-      const scriptData = await aiService.generateScript(topic);
+      // Generate script using AI with user preferences
+      const scriptData = await aiService.generateScript(topic, options);
+      
+      // CRITICAL: Clean script text - remove JSON formatting if present
+      let cleanScriptText = scriptData.script || scriptData;
+      if (typeof cleanScriptText === 'object') {
+        cleanScriptText = cleanScriptText.script || JSON.stringify(cleanScriptText);
+      }
+      // Remove JSON artifacts
+      cleanScriptText = cleanScriptText
+        .replace(/^\{[\s\S]*"script":\s*"/m, '')
+        .replace(/"[\s\S]*\}$/m, '')
+        .replace(/\\n/g, ' ')
+        .replace(/\\/g, '')
+        .trim();
+      
+      // ENFORCE LENGTH LIMIT - 25 words MAX (approximately 150 chars)
+      const wordCount = cleanScriptText.split(/\s+/).length;
+      if (wordCount > 30) {
+        console.log(`⚠️  Script too long (${wordCount} words), truncating to 25 words...`);
+        cleanScriptText = cleanScriptText.split(/\s+/).slice(0, 25).join(' ') + '.';
+      }
+      
+      console.log(`📝 Clean script (${cleanScriptText.length} chars, ${cleanScriptText.split(/\s+/).length} words): ${cleanScriptText}`);
       
       updateProgress(jobId, `Generating voice narration ${i + 1}/${count}`, (i / count) * 20 + 10);
       
-      // Generate TTS audio with background music
-      const rawAudioPath = await ttsService.generateSpeech(scriptData.script, `video_${i + 1}`);
+      // Generate TTS audio with CLEAN script text
+      const rawAudioPath = await ttsService.generateSpeech(cleanScriptText, `video_${i + 1}`);
+      tempFiles.push(rawAudioPath);
       
-      // Add background music
-      const musicPath = await musicService.getBackgroundMusic('upbeat', 60);
-      const audioPath = musicPath ? 
-        await musicService.mixAudioWithMusic(rawAudioPath, musicPath, `video_${i + 1}_with_music.wav`) :
-        rawAudioPath;
+      // Get intelligent background music (Freesound + Pixabay + Curated) with user mood preference
+      console.log('🎵 [Music] Searching for intelligent background music...');
+      const musicRecommendation = await intelligentMusicService.recommendMusic(cleanScriptText, {
+        duration: 60,
+        mood: options.mood || 'auto',
+        energy: options.mood || 'auto', // Use mood as energy hint
+        genre: 'auto'
+      });
+      
+      let audioPath = rawAudioPath;
+      if (musicRecommendation && musicRecommendation.selected && musicRecommendation.selected.path) {
+        const musicPath = musicRecommendation.selected.path;
+        console.log(`✅ [Music] Selected: ${musicRecommendation.selected.title} from ${musicRecommendation.selected.source}`);
+        tempFiles.push(musicPath);
+        
+        // Mix narration with background music - CRITICAL: Pass target duration to ensure audio is long enough
+        const targetDuration = options.videoDuration === '15-30s' ? 30 : options.videoDuration === '45-60s' ? 60 : 45;
+        audioPath = await musicService.mixAudioWithMusic(rawAudioPath, musicPath, `video_${i + 1}_with_music.wav`, { targetDuration });
+        tempFiles.push(audioPath);
+      } else {
+        console.log('⚠️  [Music] No music found, using narration only');
+      }
       
       // Prefer stock videos by script keywords
       let videoClips = [];
       const keywords = extractVisualKeywords(scriptData.script);
       const searchTopic = (keywords && keywords.length > 0) ? keywords.slice(0,3).join(' ') : topic;
-      console.log(`🎥 Searching stock videos for: "${searchTopic}"`);
+      console.log(` Searching stock videos for: "${searchTopic}"`);
+      
+      // Fetch from both sources in parallel - OPTIMAL COUNT FOR 30-45s VIDEOS
       const [pexelsVideos, pixabayVideos] = await Promise.allSettled([
-        pexelsService.fetchVideos(searchTopic, 5),
-        pixabayService.fetchVideos(searchTopic, 5)
+        pexelsService.fetchVideos(searchTopic, 5), // 5 videos from Pexels (4.5s each = 22.5s)
+        pixabayService.fetchVideos(searchTopic, 5)  // 5 videos from Pixabay
       ]);
-      if (pexelsVideos.status === 'fulfilled' && Array.isArray(pexelsVideos.value)) videoClips.push(...pexelsVideos.value);
-      if (pixabayVideos.status === 'fulfilled' && Array.isArray(pixabayVideos.value)) videoClips.push(...pixabayVideos.value);
+      
+      if (pexelsVideos.status === 'fulfilled' && Array.isArray(pexelsVideos.value)) {
+        videoClips.push(...pexelsVideos.value);
+        pexelsVideos.value.forEach(v => tempFiles.push(v.path));
+      }
+      if (pixabayVideos.status === 'fulfilled' && Array.isArray(pixabayVideos.value)) {
+        videoClips.push(...pixabayVideos.value);
+        pixabayVideos.value.forEach(v => tempFiles.push(v.path));
+      }
 
-      // If not enough stock clips, generate AI images and build slideshow
-      if (videoClips.length < 6) {
-        updateProgress(jobId, `Generating AI images ${i + 1}/${count}`, (i / count) * 20 + 15);
-        console.log(`🎨 Generating AI images for: "${topic}"`);
-        const imagePrompts = generateImagePrompts(topic);
-        const aiImages = [];
-        for (const prompt of imagePrompts) {
-          for (let k = 0; k < 2; k++) {
-            const imagePath = await imageGenerationService.generateImage(prompt, `ai_image_${Date.now()}_${k}`);
-            if (imagePath) aiImages.push(imagePath);
+      // CRITICAL: We MUST have real videos - no fallback to images!
+      if (videoClips.length < 5) {
+        console.error(`❌ INSUFFICIENT VIDEOS: Only ${videoClips.length} videos found!`);
+        console.log(`🔄 Trying broader search terms...`);
+        
+        // Try generic searches as last resort
+        const genericSearches = ['people', 'lifestyle', 'nature', 'city', 'technology'];
+        for (const generic of genericSearches) {
+          if (videoClips.length >= 5) break;
+          
+          const [moreVideos] = await Promise.allSettled([
+            pexelsService.fetchVideos(generic, 3)
+          ]);
+          
+          if (moreVideos.status === 'fulfilled' && Array.isArray(moreVideos.value)) {
+            videoClips.push(...moreVideos.value);
+            moreVideos.value.forEach(v => tempFiles.push(v.path));
           }
-        }
-        console.log(`✅ Generated ${aiImages.length} AI images`);
-
-        if (aiImages.length > 0) {
-          const enhancedVideos = await enhancedVideoGenerationService.generateMultipleVideos(aiImages, `enhanced_ffmpeg_${Date.now()}`);
-          if (enhancedVideos.length > 0) videoClips.push(...enhancedVideos);
         }
       }
       
       // Sort by quality and take the best ones
       videoClips.sort((a, b) => (b.quality || 0) - (a.quality || 0));
-      videoClips = videoClips.slice(0, 6); // Take top 6 videos
+      videoClips = videoClips.slice(0, 8); // Take top 8 videos for 60-second video
       
-      console.log(`🎬 Total videos collected: ${videoClips.length}`);
+      console.log(`🎬 Total HIGH-QUALITY videos collected: ${videoClips.length}`);
       
       updateProgress(jobId, `Assembling video ${i + 1}/${count}`, (i / count) * 20 + 18);
       
-      // Assemble video with FFmpeg
+      // Assemble video with FFmpeg - use CLEAN script text
       const finalVideoPath = await videoService.assembleVideo({
         audioPath,
         videoClips,
-        script: scriptData.script,
+        script: cleanScriptText, // Use cleaned script for subtitles
         videoIndex: i + 1
       });
+      tempFiles.push(finalVideoPath);
       
       updateProgress(jobId, `Uploading to YouTube ${i + 1}/${count}`, (i / count) * 20 + 19);
       
@@ -504,21 +577,38 @@ async function processVideosAsync(jobId, topic, count, publishDate) {
         
         console.log(`✅ Video ${i + 1}/${count} uploaded successfully: ${uploadResult.url}`);
         updateProgress(jobId, `Video ${i + 1}/${count} completed`, ((i + 1) / count) * 100);
+        
+        // Clean up temp files for this video
+        await cleanupService.cleanupAfterProcessing(tempFiles);
+        tempFiles.length = 0; // Clear array
+        
       } catch (uploadError) {
         console.error(`❌ YouTube upload failed for video ${i + 1}/${count}:`, uploadError.message);
         progress.errors.push(`Upload failed: ${uploadError.message}`);
         updateProgress(jobId, `Upload failed for video ${i + 1}/${count}`, ((i + 1) / count) * 100, 'error');
+        
+        // Clean up temp files even on error
+        await cleanupService.cleanupAfterProcessing(tempFiles);
+        tempFiles.length = 0;
+        
         // Continue with next video instead of stopping
         continue;
       }
     }
     
     updateProgress(jobId, 'All videos completed successfully!', 100, 'completed');
+    progress.completedAt = Date.now();
     
   } catch (error) {
-    console.error('Error processing videos:', error);
+    console.error('❌ Error processing videos:', error);
     progress.errors.push(error.message);
     updateProgress(jobId, `Error: ${error.message}`, progress.progress, 'error');
+    progress.completedAt = Date.now();
+    
+    // Clean up any remaining temp files
+    if (tempFiles.length > 0) {
+      await cleanupService.cleanupAfterProcessing(tempFiles);
+    }
   }
 }
 
@@ -532,14 +622,23 @@ function updateProgress(jobId, step, progressPercent, status = 'processing') {
   }
 }
 
+// Start cleanup service
+cleanupService.scheduleAutomaticCleanup();
+
 app.listen(PORT, () => {
   console.log('\n🚀 YouTube Shorts Automation Platform');
   console.log('=====================================');
   console.log(`📊 Dashboard: http://localhost:${PORT}`);
   console.log(`🎬 Ready to create amazing YouTube Shorts!`);
-  console.log('\n🔧 Make sure to:');
-  console.log('   1. Configure your .env file with API keys');
-  console.log('   2. Install FFmpeg on your system');
-  console.log('   3. Authenticate with YouTube via the dashboard');
-  console.log('\n💡 Check the README.md for detailed setup instructions\n');
+  console.log('\n✅ Services Status:');
+  console.log('   • AI Service: Ready');
+  console.log('   • TTS Service: Ready (gTTS priority)');
+  console.log('   • Music Service: Ready (Freesound + Synthetic)');
+  console.log('   • Video Service: Ready');
+  console.log('   • Cleanup Service: Scheduled');
+  console.log('\n🔧 Next Steps:');
+  console.log('   1. Check your .env file (use .env.example as template)');
+  console.log('   2. Authenticate with YouTube via dashboard');
+  console.log('   3. Start creating viral content!');
+  console.log('\n💡 All services optimized for FREE usage!\n');
 });

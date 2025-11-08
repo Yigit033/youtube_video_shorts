@@ -45,6 +45,11 @@ class YouTubeService {
       // Initialize YouTube API client
       this.youtube = google.youtube({ version: 'v3', auth: this.oauth2Client });
       
+      // Initialize Analytics if tokens exist
+      if (fs.existsSync(this.tokensPath)) {
+        this.initializeAnalytics();
+      }
+      
       console.log('✅ YouTube service initialized');
     } catch (error) {
       console.error('❌ Failed to initialize YouTube service:', error.message);
@@ -97,7 +102,16 @@ class YouTubeService {
         console.log('✅ Loaded saved YouTube tokens');
       }
     } catch (error) {
-      console.error('Failed to load saved tokens:', error);
+      console.error('❌ Error loading tokens:', error.message);
+    }
+  }
+
+  async initializeAnalytics() {
+    try {
+      const analyticsService = require('./youtubeAnalytics');
+      await analyticsService.initialize(this.oauth2Client);
+    } catch (error) {
+      console.error('❌ Error initializing YouTube Analytics:', error.message);
     }
   }
 
@@ -487,7 +501,7 @@ class YouTubeService {
       tags = ['shorts', 'youtubeshorts', 'viral', 'trending'];
     }
     
-    // Process each tag
+    // Process each tag - remove # symbols (they go in description, not tags)
     return tags
       .filter(tag => {
         // Remove non-string tags
@@ -505,7 +519,7 @@ class YouTubeService {
         
         return true;
       })
-      .map(tag => tag.trim().toLowerCase())
+      .map(tag => tag.trim().toLowerCase().replace(/^#+/, '')) // Remove # prefix
       .filter((tag, index, self) => self.indexOf(tag) === index) // Remove duplicates
       .slice(0, 15); // YouTube limit: 15 tags
   }

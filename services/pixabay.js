@@ -18,34 +18,24 @@ class PixabayService {
 
   async fetchVideos(query, count = 3) {
     if (!this.apiKey) {
-      console.log('⚠️ Pixabay API key not configured, skipping Pixabay videos');
-      console.log('💡 Add PIXABAY_API_KEY to your .env file');
+      console.log('⚠️  [Pixabay] API key not configured, skipping');
       return [];
-    }
-    
-    console.log(`🔑 [Pixabay] Using API key: ${this.apiKey.substring(0, 8)}...`);
-
-    // Improve search queries for better results
-    let searchQuery = query;
-    if (query.includes('cafe') || query.includes('coffee') || query.includes('tea')) {
-      searchQuery = 'family cafe people drinking coffee';
     }
 
     try {
-      console.log(`🎬 [Pixabay] Searching for videos: "${searchQuery}"`);
+      console.log(`🎬 [Pixabay] Searching for videos: "${query}"`);
       
       const response = await axios.get(this.baseUrl, {
         params: {
           key: this.apiKey,
-          q: searchQuery,
+          q: query,
           video_type: 'film',
           orientation: 'vertical',
-          min_width: 1920, // Full HD minimum
-          min_height: 1080,
-          per_page: count * 4, // Çok daha fazla video al
+          min_width: 720,
+          per_page: Math.min(count + 2, 10),
           order: 'popular',
-          min_duration: 10, // En az 10 saniye
-          max_duration: 60 // En fazla 60 saniye
+          min_duration: 5,
+          max_duration: 60
         },
         timeout: 10000
       });

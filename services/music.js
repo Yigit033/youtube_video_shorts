@@ -1,134 +1,92 @@
-const axios = require('axios');
+// music.js
+// Profesyonel miksaj / ducking / ses optimizasyonu için revize edilmiş servis.
+
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 
 class MusicService {
   constructor() {
     this.outputDir = path.join(__dirname, '..', 'temp', 'audio');
-    this.ensureOutputDir();
-    
-    // Free royalty-free music URLs (Creative Commons)
-    this.musicTracks = [
-      {
-        name: 'upbeat_inspiration',
-        url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav',
-        mood: 'upbeat',
-        duration: 30
-      },
-      {
-        name: 'romantic_ambient',
-        url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav',
-        mood: 'romantic',
-        duration: 30
-      },
-      {
-        name: 'calm_peaceful',
-        url: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav',
-        mood: 'calm',
-        duration: 30
-      }
-    ];
+    if (!fs.existsSync(this.outputDir)) fs.mkdirSync(this.outputDir, { recursive: true });
+    this.targetLUFS = -14; // YouTube Shorts friendly
+    console.log('🎵 MusicService initialized (revized)');
   }
 
-  ensureOutputDir() {
-    if (!fs.existsSync(this.outputDir)) {
-      fs.mkdirSync(this.outputDir, { recursive: true });
-    }
+  // Get background music (wrapper) — can call IntelligentMusicService or local generators
+  // Kept simple: expect intelligentMusicService to supply a path
+  async getBackgroundMusic(options = {}) {
+    // placeholder: this class assumes a music file path is provided by caller
+    // For compatibility: return null so caller can use intelligentMusicService to provide music
+    return null;
   }
 
-  async getBackgroundMusic(mood = 'upbeat', duration = 30) {
+  // Mix narration (voice) with music using sidechain ducking + normalization
+  // audioPath: narration (voice) file
+  // musicPath: bg music file
+  // outputPath: target final file (wav or mp3)
+  async mixAudioWithMusic(audioPath, musicPath, outputPath, opts = {}) {
+    const finalFile = outputPath || path.join(this.outputDir, `mixed_${Date.now()}.wav`);
+    const musicVol = (typeof opts.musicVolume !== 'undefined') ? opts.musicVolume : 0.35;
+    const narrationGain = (typeof opts.narrationGain !== 'undefined') ? opts.narrationGain : 1.25;
+    const duckThreshold = opts.duckThreshold || -30;
+    const duckRatio = opts.duckRatio || 10;
+    const attack = opts.attack || 3;
+    const release = opts.release || 150;
+    const targetLUFS = (typeof opts.targetLUFS !== 'undefined') ? opts.targetLUFS : this.targetLUFS;
+    const fadeIn = opts.fadeIn || 1.0;
+    const fadeOut = opts.fadeOut || 1.5;
+    const targetDuration = opts.targetDuration || 45; // CRITICAL: Target duration for final audio
+
     try {
-      console.log(`🎵 [Music] Getting background music for mood: ${mood}`);
-      
-      // Select appropriate track based on mood
-      const track = this.musicTracks.find(t => t.mood === mood) || this.musicTracks[0];
-      
-      const filename = `bg_music_${mood}_${Date.now()}.mp3`;
-      const outputPath = path.join(this.outputDir, filename);
-      
-      // For now, create a simple tone (in production, you'd use real royalty-free music)
-      const musicPath = await this.createSimpleTone(outputPath, duration);
-      
-      console.log(`✅ [Music] Background music created: ${filename}`);
-      return musicPath;
-      
-    } catch (error) {
-      console.error(`❌ [Music] Error getting background music: ${error.message}`);
-      return null;
-    }
-  }
+      // CRITICAL: Music must be looped/extended to match or exceed narration duration
+      // This ensures final audio is long enough for the video
+      const filterComplex = [
+        // narration: highpass/lowpass, eq-ish, compressor, normalize gain, pad to target duration
+        `[0:a]highpass=f=80,lowpass=f=12000,acompressor=threshold=-18dB:ratio=3:attack=5:release=50,volume=${narrationGain},apad=whole_dur=${targetDuration}[narr]`,
+        // music: LOOP to target duration, then volume and fades
+        `[1:a]aloop=loop=-1:size=2e+09,atrim=0:${targetDuration},volume=${musicVol},afade=t=in:st=0:d=${fadeIn},afade=t=out:st=${Math.max(0,targetDuration-fadeOut)}:d=${fadeOut}[music]`,
+        // sidechain ducking: main = music, sidechain = narration (music volume reduces when narration plays)
+        `[music][narr]sidechaincompress=threshold=${duckThreshold}dB:ratio=${duckRatio}:attack=${attack}:release=${release}[ducked]`,
+        // MIX ducked music with narration - CRITICAL: This is where narration is added back!
+        `[ducked][narr]amix=inputs=2:duration=longest:weights=${musicVol} ${1.0}[mixed]`,
+        // final normalization
+        `[mixed]loudnorm=I=${targetLUFS}:TP=-1.0:LRA=7[out]`
+      ].join(';');
 
-  async createSimpleTone(outputPath, duration) {
-    // Create a simple sine wave tone using FFmpeg
-    return new Promise((resolve, reject) => {
-      const { spawn } = require('child_process');
-      
-      const ffmpeg = spawn('ffmpeg', [
-        '-f', 'lavfi',
-        '-i', `sine=frequency=440:duration=${duration}`,
-        '-af', 'volume=0.1', // Very low volume for background
+      const args = [
         '-y',
-        outputPath
-      ], { windowsHide: true });
-      
-      ffmpeg.on('close', (code) => {
-        if (code === 0 && fs.existsSync(outputPath)) {
-          resolve(outputPath);
-        } else {
-          reject(new Error(`FFmpeg tone generation failed with code ${code}`));
-        }
-      });
-      
-      ffmpeg.on('error', (error) => {
-        reject(new Error(`FFmpeg tone generation error: ${error.message}`));
-      });
-    });
+        '-i', audioPath,
+        '-i', musicPath,
+        '-filter_complex', filterComplex,
+        '-map', '[out]',
+        '-c:a', 'pcm_s16le',
+        '-ar', '48000',
+        '-ac', '1',
+        finalFile
+      ];
+
+      await this._spawnFFmpeg(args);
+      return finalFile;
+    } catch (err) {
+      console.error('❌ mixAudioWithMusic failed:', err.message);
+      // fallback: return narration only (safe)
+      return audioPath;
+    }
   }
 
-  async mixAudioWithMusic(audioPath, musicPath, outputPath) {
-    try {
-      console.log(`🎵 [Music] Mixing audio with background music (normalized)`);
-      
-      return new Promise((resolve, reject) => {
-        const { spawn } = require('child_process');
-        
-        // Normalize narration to -16 LUFS, mix BG at -6 dB with fades
-        const ffmpeg = spawn('ffmpeg', [
-          '-i', audioPath,
-          '-i', musicPath,
-          '-filter_complex', [
-            '[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[narration]',
-            '[1:a]volume=-6dB,afade=t=in:st=0:d=2,afade=t=out:st=58:d=2[music]',
-            '[narration]volume=+2dB[narration_up]',
-            '[narration_up][music]amix=inputs=2:duration=first:dropout_transition=2[mixed]'
-          ].join(';'),
-          '-map', '[mixed]',
-          '-c:a', 'aac',
-          '-b:a', '192k',
-          '-ar', '48000',
-          '-y',
-          outputPath
-        ], { windowsHide: true });
-        
-        ffmpeg.on('close', (code) => {
-          if (code === 0 && fs.existsSync(outputPath)) {
-            console.log(`✅ [Music] Audio mixed successfully (normalized)`);
-            resolve(outputPath);
-          } else {
-            reject(new Error(`FFmpeg mixing failed with code ${code}`));
-          }
-        });
-        
-        ffmpeg.on('error', (error) => {
-          reject(new Error(`FFmpeg mixing error: ${error.message}`));
-        });
+  _spawnFFmpeg(args) {
+    return new Promise((resolve, reject) => {
+      const ff = spawn('ffmpeg', args, { windowsHide: true });
+      let stderr = '';
+      ff.stderr.on('data', (d) => stderr += d.toString());
+      ff.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error('ffmpeg error: ' + stderr.slice(-1000)));
       });
-      
-    } catch (error) {
-      console.error(`❌ [Music] Error mixing audio: ${error.message}`);
-      return audioPath; // Return original audio if mixing fails
-    }
+      ff.on('error', (e) => reject(e));
+    });
   }
 }
 
-module.exports = MusicService;
+module.exports = new MusicService();

@@ -11,23 +11,26 @@ class TTSService {
     this.isProduction = process.env.NODE_ENV === 'production';
     this.isWindows = process.platform === 'win32';
     
-    this.ttsProvider = process.env.TTS_PROVIDER || (this.isProduction ? 'huggingface' : 'windows');
+    // Default to gTTS (best free option)
+    this.ttsProvider = process.env.TTS_PROVIDER || 'gtts';
     this.ttsVoice = process.env.TTS_VOICE || 'Microsoft David Desktop';
     
     this.huggingfaceTtsUrl = 'https://api-inference.huggingface.co/models/facebook/mms-tts-eng';
     
-    console.log('TTS Service Initialized');
-    console.log(`- Platform: ${process.platform}`);
-    console.log(`- Environment: ${this.isProduction ? 'Production' : 'Development'}`);
-    console.log(`- TTS Provider: ${this.ttsProvider}`);
-    console.log(`- TTS Voice: ${this.ttsVoice}`);
-    console.log(`- Output Directory: ${this.outputDir}`);
-    console.log(`- Using TTS Model: ${this.huggingfaceTtsUrl}`);
+    console.log('🎤 TTS Service Initialized');
+    console.log(`📍 Platform: ${process.platform}`);
+    console.log(`🌍 Environment: ${this.isProduction ? 'Production' : 'Development'}`);
+    console.log(`🎙️  TTS Provider: ${this.ttsProvider}`);
+    console.log(`📁 Output Directory: ${this.outputDir}`);
     
-    if (this.isProduction) {
-      console.log('- Production Mode: Using Cross-Platform TTS as primary');
-    } else if (this.isWindows) {
-      console.log('- Development Mode: Using Cross-Platform TTS as primary');
+    if (this.ttsProvider === 'gtts') {
+      console.log('✅ Using gTTS (Google TTS) - FREE, UNLIMITED, HIGH QUALITY');
+    } else if (this.ttsProvider === 'piper') {
+      console.log('✅ Using Piper TTS - FREE, OFFLINE, HIGH QUALITY');
+    } else if (this.ttsProvider === 'windows') {
+      console.log('✅ Using Windows TTS - FREE, BUILT-IN');
+    } else {
+      console.log('⚠️  Unknown TTS provider, will use fallback chain');
     }
   }
 
@@ -75,95 +78,220 @@ class TTSService {
   }
 
   getTTSMethods() {
-    if (this.isProduction) {
-      // Production: Piper → gTTS → HuggingFace → Windows → eSpeak → Silent
-      return [
-        {
-          name: 'Piper TTS (CLI)',
-          func: async (text, outputPath) => this.generateWithPiper(text, outputPath),
+    // DYNAMIC PRIORITY: Check TTS_PROVIDER env variable first!
+    const preferredProvider = process.env.TTS_PROVIDER || 'gTTS';
+    
+    const allMethods = {
+      'coqui': {
+        name: 'Coqui TTS (Professional)',
+        func: async (text, outputPath) => this.generateWithCoqui(text, outputPath),
+        description: '✅ BEST QUALITY, FREE, UNLIMITED',
+        skip: () => !this.isCoquiInstalled(),
+        skipReason: 'Not installed (pip install TTS)'
+      },
+      'piper': {
+        name: 'Piper TTS (Local)',
+        func: async (text, outputPath) => this.generateWithPiper(text, outputPath),
+        description: '✅ FREE, OFFLINE, HIGH QUALITY',
+        skip: () => !this.isPiperInstalled(),
+        skipReason: 'Not installed (see PIPER_KURULUM_REHBERI.md)'
+      },
+      'gtts': {
+        name: 'Google Translate TTS (gTTS)',
+        func: async (text, outputPath) => this.generateWithGTTS(text, outputPath),
+        description: '✅ FREE, UNLIMITED, HIGH QUALITY'
+      },
+      'windows': {
+        name: 'Windows TTS (SAPI)',
+        condition: () => this.isWindows,
+        func: async (text, outputPath) => this.generateWithWindowsTTS(text, outputPath),
+        description: '✅ FREE, BUILT-IN (Windows only)'
+      },
+      'huggingface': {
+        name: 'HuggingFace TTS (Cloud)',
+        func: async (text, outputPath) => {
+          const audioData = await this.generateWithHuggingFace(text);
+          fs.writeFileSync(outputPath, audioData);
+          return outputPath;
         },
-        {
-          name: 'Google Translate TTS',
-          func: async (text, outputPath) => this.generateWithGTTS(text, outputPath)
-        },
-        {
-          name: 'HuggingFace TTS',
-          func: async (text, outputPath) => this.generateWithHuggingFace(text, outputPath)
-        },
-        {
-          name: 'Windows TTS',
-          condition: () => this.isWindows,
-          func: async (text, outputPath) => this.generateWithWindowsTTS(text, outputPath)
-        },
-        {
-          name: 'eSpeak',
-          condition: () => this.isEspeakAvailable(),
-          func: async (text, outputPath) => this.generateWithEspeak(text, outputPath)
-        },
-        {
-          name: 'Silent Audio',
-          func: async (text, outputPath) => this.createSilentAudio(outputPath, text)
-        }
-      ];
-    } else {
-      // Development: Piper → gTTS → Windows → Cross-Platform → HuggingFace → eSpeak → Silent
-      return [
-        {
-          name: 'Piper TTS (CLI)',
-          func: async (text, outputPath) => this.generateWithPiper(text, outputPath),
-        },
-        {
-          name: 'Google Translate TTS',
-          func: async (text, outputPath) => this.generateWithGTTS(text, outputPath)
-        },
-        {
-          name: 'Windows TTS',
-          condition: () => this.isWindows,
-          func: async (text, outputPath) => this.generateWithWindowsTTS(text, outputPath)
-        },
-        {
-          name: 'Cross-Platform TTS',
-          func: async (text, outputPath) => this.generateWithCrossPlatformTTS(text, outputPath)
-        },
-        {
-          name: 'HuggingFace TTS',
-          skip: () => process.env.NODE_ENV === 'production',
-          func: async (text, outputPath) => {
-            const audioData = await this.generateWithHuggingFace(text);
-            fs.writeFileSync(outputPath, audioData);
-            return outputPath;
-          }
-        },
-        {
-          name: 'eSpeak',
-          condition: () => this.isEspeakAvailable(),
-          func: async (text, outputPath) => this.generateWithEspeak(text, outputPath)
-        },
-        {
-          name: 'Silent Audio',
-          func: async (text, outputPath) => this.createSilentAudio(outputPath, text)
-        }
-      ];
-    }
+        description: '⚠️  FREE with rate limits'
+      },
+      'espeak': {
+        name: 'eSpeak (Fallback)',
+        condition: () => this.isEspeakAvailable(),
+        func: async (text, outputPath) => this.generateWithEspeak(text, outputPath),
+        description: '⚠️  FREE but robotic voice'
+      },
+      'silent': {
+        name: 'Silent Audio (Last Resort)',
+        func: async (text, outputPath) => this.createSilentAudio(outputPath, text),
+        description: '❌ No audio - emergency fallback'
+      }
+    };
+    
+    // Build priority list: preferred provider first, then fallbacks
+    const priorityOrder = [
+      preferredProvider.toLowerCase(),
+      'coqui', 'piper', 'gtts', 'windows', 'huggingface', 'espeak', 'silent'
+    ];
+    
+    // Remove duplicates and build final list
+    const uniqueProviders = [...new Set(priorityOrder)];
+    return uniqueProviders
+      .map(key => allMethods[key])
+      .filter(method => method); // Remove undefined
   }
 
   async generateWithGTTS(text, outputPath) {
     try {
-      console.log('[TTS] Trying Google Translate TTS (High Quality)...');
+      console.log('🎤 [gTTS] Generating speech with Google Translate TTS...');
       const gtts = require('gtts');
-      const gttsInstance = new gtts(text, 'en');
-      return new Promise((resolve, reject) => {
-        gttsInstance.save(outputPath, (err) => {
-          if (err) reject(err);
-          else {
-            console.log('✅ gTTS generated successfully');
-            resolve(outputPath);
-          }
+      
+      // Split long text into chunks (gTTS has 200 char limit per request)
+      const maxChunkLength = 200;
+      if (text.length <= maxChunkLength) {
+        // Use slow=false for more natural, faster speech (less robotic)
+        const gttsInstance = new gtts(text, 'en', { slow: false });
+        const mp3Path = outputPath.replace('.wav', '.mp3');
+        return new Promise((resolve, reject) => {
+          gttsInstance.save(mp3Path, async (err) => {
+            if (err) {
+              console.error('❌ [gTTS] Error:', err.message);
+              reject(err);
+            } else {
+              // Convert MP3 to WAV with better quality settings
+              await this.convertToWAV(mp3Path, outputPath);
+              try { fs.unlinkSync(mp3Path); } catch (e) {}
+              console.log('✅ [gTTS] Speech generated successfully!');
+              resolve(outputPath);
+            }
+          });
         });
-      });
+      } else {
+        // Handle long text by splitting into sentences
+        console.log(`📝 [gTTS] Text is long (${text.length} chars), splitting into chunks...`);
+        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        const chunks = [];
+        let currentChunk = '';
+        
+        for (const sentence of sentences) {
+          if ((currentChunk + sentence).length <= maxChunkLength) {
+            currentChunk += sentence;
+          } else {
+            if (currentChunk) chunks.push(currentChunk);
+            currentChunk = sentence;
+          }
+        }
+        if (currentChunk) chunks.push(currentChunk);
+        
+        console.log(`📦 [gTTS] Split into ${chunks.length} chunks`);
+        
+        // Generate audio for each chunk with improved quality
+        const chunkPaths = [];
+        for (let i = 0; i < chunks.length; i++) {
+          const chunkPath = outputPath.replace('.wav', `_chunk${i}.mp3`);
+          const gttsInstance = new gtts(chunks[i], 'en', { slow: false }); // Natural speed
+          await new Promise((resolve, reject) => {
+            gttsInstance.save(chunkPath, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+          chunkPaths.push(chunkPath);
+        }
+        
+        // Concatenate chunks using FFmpeg
+        console.log('🔗 [gTTS] Concatenating audio chunks...');
+        await this.concatenateAudioFiles(chunkPaths, outputPath);
+        
+        // Clean up chunk files
+        chunkPaths.forEach(p => {
+          try { fs.unlinkSync(p); } catch (e) {}
+        });
+        
+        console.log('✅ [gTTS] Long speech generated successfully!');
+        return outputPath;
+      }
     } catch (error) {
-      console.error('gTTS Error:', error.message);
+      console.error('❌ [gTTS] Error:', error.message);
       throw error;
+    }
+  }
+  
+  async concatenateAudioFiles(inputPaths, outputPath) {
+    return new Promise((resolve, reject) => {
+      const { spawn } = require('child_process');
+      const listFile = outputPath.replace('.wav', '_list.txt');
+      
+      // Create concat list file
+      const listContent = inputPaths.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
+      fs.writeFileSync(listFile, listContent);
+      
+      const ffmpeg = spawn('ffmpeg', [
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', listFile,
+        '-c', 'copy',
+        '-y',
+        outputPath
+      ], { windowsHide: true });
+      
+      ffmpeg.on('close', (code) => {
+        try { fs.unlinkSync(listFile); } catch (e) {}
+        if (code === 0) resolve(outputPath);
+        else reject(new Error(`FFmpeg concat failed with code ${code}`));
+      });
+      
+      ffmpeg.on('error', reject);
+    });
+  }
+
+  isCoquiInstalled() {
+    try {
+      const { execSync } = require('child_process');
+      execSync('tts --help', { stdio: 'ignore' });
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  isPiperInstalled() {
+    try {
+      const piperPath = process.env.PIPER_PATH || 'piper';
+      const piperModel = process.env.PIPER_MODEL;
+      
+      // Check if piper executable exists
+      if (piperPath !== 'piper' && !fs.existsSync(piperPath)) {
+        console.log(`⚠️ Piper executable not found at: ${piperPath}`);
+        return false;
+      }
+      
+      // Check if model exists
+      if (!piperModel || !fs.existsSync(piperModel)) {
+        console.log(`⚠️ Piper model not found at: ${piperModel}`);
+        return false;
+      }
+      
+      console.log(`✅ Piper TTS found: ${piperPath} with model ${piperModel}`);
+      return true;
+    } catch (error) {
+      console.log(`⚠️ Piper check failed: ${error.message}`);
+      return false;
+    }
+  }
+
+  async generateWithCoqui(text, outputPath) {
+    try {
+      const coquiTTS = require('./coquiTTS');
+      
+      if (text.length > 500) {
+        return await coquiTTS.generateLongSpeech(text, outputPath);
+      } else {
+        return await coquiTTS.generateSpeech(text, outputPath);
+      }
+    } catch (error) {
+      throw new Error(`Coqui TTS failed: ${error.message}`);
     }
   }
 
@@ -341,23 +469,31 @@ class TTSService {
   async generateWithPiper(text, outputPath) {
     return new Promise((resolve, reject) => {
       try {
-        const voicePath = process.env.PIPER_VOICE_PATH;
-        if (!voicePath || !fs.existsSync(voicePath)) {
-          return reject(new Error('Piper voice not configured (PIPER_VOICE_PATH missing)'));
+        // Use PIPER_PATH (correct) or fallback to PIPER_BIN (legacy)
+        const piperBin = process.env.PIPER_PATH || process.env.PIPER_BIN || 'piper';
+        const modelPath = process.env.PIPER_MODEL || process.env.PIPER_VOICE_PATH;
+        
+        // Check if Piper executable exists
+        if (!fs.existsSync(piperBin)) {
+          return reject(new Error(`Piper executable not found at: ${piperBin}. Please install Piper (see PIPER_KURULUM_REHBERI.md)`));
         }
-        const piperBin = process.env.PIPER_BIN || 'piper'; // allow full path to piper.exe
+        
+        // Check if model exists
+        if (!modelPath || !fs.existsSync(modelPath)) {
+          return reject(new Error(`Piper model not found at: ${modelPath}. Please download model (see PIPER_KURULUM_REHBERI.md)`));
+        }
 
         // Optional config JSON
         let configPath = process.env.PIPER_VOICE_CONFIG || '';
         if (!configPath) {
-          const inferred = `${voicePath}.json`;
+          const inferred = `${modelPath}.json`;
           if (fs.existsSync(inferred)) configPath = inferred;
         }
 
         // Optional espeak-ng data directory (fixes phontab not found errors)
         const espeakData = process.env.PIPER_ESPEAK_DATA; // e.g., C:\piper\espeak-ng-data
 
-        const args = ['--model', voicePath, '--output_file', outputPath];
+        const args = ['--model', modelPath, '--output_file', outputPath];
         if (configPath) args.push('--config', configPath);
         // Prefer setting working dir and env; also pass --data-dir to be safe
         if (espeakData && fs.existsSync(espeakData)) {
@@ -396,6 +532,30 @@ class TTSService {
       } catch (error) {
         reject(error);
       }
+    });
+  }
+
+  async convertToWAV(inputPath, outputPath) {
+    return new Promise((resolve, reject) => {
+      const { spawn } = require('child_process');
+      
+      // Convert to high-quality WAV with audio enhancement
+      const ffmpeg = spawn('ffmpeg', [
+        '-i', inputPath,
+        '-ar', '48000',        // 48kHz sample rate (professional quality)
+        '-ac', '1',            // Mono
+        '-c:a', 'pcm_s16le',   // PCM 16-bit
+        '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11,highpass=f=80,lowpass=f=12000', // Audio normalization and cleanup
+        '-y',
+        outputPath
+      ], { windowsHide: true });
+      
+      ffmpeg.on('close', (code) => {
+        if (code === 0) resolve(outputPath);
+        else reject(new Error(`FFmpeg conversion failed with code ${code}`));
+      });
+      
+      ffmpeg.on('error', reject);
     });
   }
 

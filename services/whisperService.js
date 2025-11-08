@@ -8,7 +8,7 @@ class WhisperService {
     this.modelPath = process.env.WHISPER_MODEL_PATH || './models/whisper-base.en';
   }
 
-  async transcribeAudio(audioPath, baseName) {
+  async transcribeAudio(audioPath, baseName, scriptText = null) {
     try {
       console.log('🎤 [Whisper] Starting audio transcription...');
       
@@ -16,16 +16,19 @@ class WhisperService {
         throw new Error(`Audio file not found: ${audioPath}`);
       }
 
-      const outputDir = path.dirname(audioPath);
-      const srtPath = path.join(outputDir, `${baseName}.srt`);
+      // Save SRT in temp/audio directory (same as audio files)
+      const audioDir = path.join(process.cwd(), 'temp', 'audio');
+      if (!fs.existsSync(audioDir)) {
+        fs.mkdirSync(audioDir, { recursive: true });
+      }
+      const srtPath = path.join(audioDir, `${baseName}.srt`);
 
       return new Promise((resolve, reject) => {
-        // For now, create a simple SRT file with basic subtitles
-        // In production, you would use actual Whisper.cpp here
-        const srtContent = this.generateBasicSRT(audioPath, baseName);
+        // Use actual script text for subtitles
+        const srtContent = this.generateSRTFromScript(scriptText, audioPath);
         
         fs.writeFileSync(srtPath, srtContent);
-        console.log('✅ [Whisper] Basic SRT generated:', srtPath);
+        console.log('✅ [Whisper] SRT generated from script:', srtPath);
         resolve(srtPath);
       });
 
@@ -35,22 +38,58 @@ class WhisperService {
     }
   }
 
-  generateBasicSRT(audioPath, baseName) {
-    // Generate a basic SRT file with timing
-    const duration = 30; // Assume 30 seconds for now
-    const text = "This is a professional video with enhanced effects and quality improvements.";
+  generateSRTFromScript(scriptText, audioPath) {
+    if (!scriptText) {
+      scriptText = "Amazing content you need to see!";
+    }
+    
+    // Clean script text - remove JSON artifacts
+    let cleanScript = scriptText;
+    if (typeof scriptText === 'object') {
+      cleanScript = scriptText.script || JSON.stringify(scriptText);
+    }
+    
+    // Remove JSON formatting if present
+    cleanScript = cleanScript
+      .replace(/^\{[\s\S]*"script":\s*"/m, '')
+      .replace(/"[\s\S]*\}$/m, '')
+      .replace(/\\n/g, ' ')
+      .replace(/#\w+/g, '') // Remove hashtags from captions
+      .trim();
+    
+    // Split into words for TikTok-style word-by-word subtitles
+    const words = cleanScript.split(/\s+/).filter(w => w.length > 0);
+    
+    // DYNAMIC TIMING: Get actual audio duration and calculate words per second
+    let audioDuration = 10; // default fallback
+    try {
+      if (fs.existsSync(audioPath)) {
+        const stats = fs.statSync(audioPath);
+        // Estimate: WAV files are ~176KB per second (44.1kHz, 16-bit, stereo)
+        audioDuration = Math.max(5, stats.size / 176000);
+      }
+    } catch (err) {
+      console.warn('⚠️ Could not get audio duration, using default');
+    }
+    
+    const wordsPerSecond = words.length / audioDuration;
+    const wordDuration = 1 / wordsPerSecond;
     
     let srtContent = '';
-    const segmentDuration = 5; // 5 second segments
-    const segments = Math.ceil(duration / segmentDuration);
+    let currentTime = 0;
     
-    for (let i = 0; i < segments; i++) {
-      const startTime = i * segmentDuration;
-      const endTime = Math.min((i + 1) * segmentDuration, duration);
+    // Group words into 2 word chunks for VIRAL TikTok/Shorts style
+    const chunkSize = 2;
+    for (let i = 0; i < words.length; i += chunkSize) {
+      const chunk = words.slice(i, i + chunkSize).join(' ');
+      const startTime = currentTime;
+      const endTime = currentTime + (wordDuration * Math.min(chunkSize, words.length - i));
       
-      srtContent += `${i + 1}\n`;
+      srtContent += `${Math.floor(i / chunkSize) + 1}\n`;
       srtContent += `${this.formatSRTTime(startTime)} --> ${this.formatSRTTime(endTime)}\n`;
-      srtContent += `${text}\n\n`;
+      srtContent += `${chunk}\n\n`;
+      
+      currentTime = endTime;
     }
     
     return srtContent;

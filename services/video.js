@@ -121,8 +121,8 @@ class VideoService {
         const filterComplex = [];
         const filterInputs = [];
         
-        // Process each video clip with advanced effects and fixed durations
-        const perClipDuration = 6; // seconds
+        // Process each video clip with CINEMATIC effects and fixed durations
+        const perClipDuration = 4.5; // seconds - FASTER for viral shorts (30-45s total)
         validClips.forEach((_, index) => {
           // Scale and crop to 1080x1920 with quality enhancement
           filterComplex.push({
@@ -139,24 +139,34 @@ class VideoService {
             outputs: `cropped${index}`
           });
           
-          // Add color enhancement and stabilization
+          // PROFESSIONAL color grading - more vibrant and cinematic
           filterComplex.push({
             filter: 'eq',
-            options: { brightness: 0.05, contrast: 1.1, saturation: 1.2 },
+            options: { brightness: 0.08, contrast: 1.15, saturation: 1.3, gamma: 1.1 },
             inputs: `cropped${index}`,
-            outputs: `enhanced${index}`
+            outputs: `graded${index}`
           });
           
-          // Add subtle zoom effect (Ken Burns)
+          // Add sharpening for crisp details
+          filterComplex.push({
+            filter: 'unsharp',
+            options: { luma_msize_x: 5, luma_msize_y: 5, luma_amount: 0.8 },
+            inputs: `graded${index}`,
+            outputs: `sharp${index}`
+          });
+          
+          // Add subtle zoom effect (Ken Burns) - more dynamic
+          const zoomDirection = index % 2 === 0 ? 'in' : 'out'; // Alternate zoom in/out
           filterComplex.push({
             filter: 'zoompan',
             options: { 
-              z: 'min(zoom+0.0015,1.5)', 
-              d: 300,
+              z: zoomDirection === 'in' ? 'min(zoom+0.003,1.25)' : 'if(lte(zoom,1.0),1.25,max(zoom-0.003,1.0))',
+              d: 225, // 4.5 seconds * 50fps
               x: 'iw/2-(iw/zoom/2)',
-              y: 'ih/2-(ih/zoom/2)'
+              y: 'ih/2-(ih/zoom/2)',
+              s: '1080x1920'
             },
-            inputs: `enhanced${index}`,
+            inputs: `sharp${index}`,
             outputs: `zoomed${index}`
           });
           
@@ -177,14 +187,16 @@ class VideoService {
           
           filterInputs.push(`[v${index}]`);
         });
-        // Crossfade between consecutive clips
-        // Apply xfade (0.5s) chain: v0, v1 -> xf0, then xf0 with v2 -> xf1, ...
+        // FAST VIRAL transitions between consecutive clips
+        // Quick, snappy transitions for TikTok/Shorts style
+        const transitions = ['fade', 'wipeleft', 'wiperight', 'slideleft', 'slideright'];
         let lastLabel = `v0`;
         for (let idx = 1; idx < validClips.length; idx++) {
           const outLabel = idx === validClips.length - 1 ? 'outv' : `xf${idx}`;
+          const transition = transitions[idx % transitions.length]; // Cycle through transitions
           filterComplex.push({
             filter: 'xfade',
-            options: { transition: 'fade', duration: 0.5, offset: idx * perClipDuration - 0.5 },
+            options: { transition: transition, duration: 0.4, offset: idx * perClipDuration - 0.4 },
             inputs: [lastLabel, `v${idx}`],
             outputs: outLabel
           });
@@ -205,7 +217,7 @@ class VideoService {
             '-movflags', '+faststart',
             '-pix_fmt', 'yuv420p',
             '-r', '30',
-            '-t', String(Math.min(60, validClips.length * perClipDuration)),
+            '-t', String(Math.min(45, validClips.length * perClipDuration)), // MAX 45 seconds for viral shorts
             '-y'
           ])
           .output(montageOutput)
@@ -275,12 +287,12 @@ class VideoService {
   }
 
   // Generate subtitles with whisper.cpp if configured
-  async generateSubtitlesFromAudio(audioPath, baseName) {
+  async generateSubtitlesFromAudio(audioPath, baseName, scriptText = null) {
     try {
       const whisperService = require('./whisperService');
-      return await whisperService.transcribeAudio(audioPath, baseName);
+      return await whisperService.transcribeAudio(audioPath, baseName, scriptText);
     } catch (e) {
-      console.warn('⚠️ Subtitle generation failed:', e.message);
+      console.warn('⚠️  Subtitle generation failed:', e.message);
       return null;
     }
   }
@@ -288,10 +300,10 @@ class VideoService {
   async addAudioAndSubtitles(videoPath, audioPath, script, outputPath) {
     return new Promise(async (resolve, reject) => {
       try {
-        // Normalize all paths
-        const normalizedVideoPath = path.normalize(videoPath);
-        const normalizedAudioPath = audioPath ? path.normalize(audioPath) : null;
-        const normalizedOutputPath = path.normalize(outputPath);
+        // Use absolute paths for FFmpeg
+        const normalizedVideoPath = path.resolve(videoPath);
+        const normalizedAudioPath = audioPath ? path.resolve(audioPath) : null;
+        const normalizedOutputPath = path.resolve(outputPath);
 
         console.log(`🔧 FFmpeg paths:\n  Video: ${normalizedVideoPath}\n  Audio: ${normalizedAudioPath || 'none'}\n  Output: ${normalizedOutputPath}`);
 
@@ -301,11 +313,17 @@ class VideoService {
           fs.mkdirSync(outputDir, { recursive: true });
         }
 
-        // Optional subtitles via whisper.cpp
+        // Generate subtitles from script text
         let srtPath = null;
-        if (normalizedAudioPath) {
+        if (normalizedAudioPath && script) {
           const baseName = path.basename(normalizedOutputPath, path.extname(normalizedOutputPath));
-          srtPath = await this.generateSubtitlesFromAudio(normalizedAudioPath, baseName);
+          const scriptText = typeof script === 'string' ? script : script.script;
+          srtPath = await this.generateSubtitlesFromAudio(normalizedAudioPath, baseName, scriptText);
+        }
+        
+        // Fallback to script srtPath if whisper failed
+        if (!srtPath && script?.srtPath) {
+          srtPath = script.srtPath;
         }
 
         // Create FFmpeg command
@@ -316,12 +334,12 @@ class VideoService {
           .outputOptions([
             '-pix_fmt yuv420p',
             '-movflags +faststart',
-            '-shortest',
+            // REMOVED '-shortest' - was causing video to be cut to shortest stream (audio)
             '-y',
             '-preset fast',
             '-crf 23',
             '-r 30',
-            '-t 60'
+            '-t 45' // MAX 45 seconds for viral shorts
           ]);
 
         // Build filters
@@ -329,24 +347,31 @@ class VideoService {
         // Scale and pad video first
         vfChain.push('scale=w=1080:h=1920:force_original_aspect_ratio=decrease');
         vfChain.push('pad=w=1080:h=1920:x=(ow-iw)/2:y=(oh-ih)/2');
-        // Burn subtitles if available
+        // Burn subtitles if available - MODERN TIKTOK/SHORTS STYLE
         if (srtPath && fs.existsSync(srtPath)) {
-          // escape backslashes for Windows paths and use TikTok-style subtitles
-          const escapedSrt = srtPath.replace(/\\/g, '\\\\');
-          vfChain.push(`subtitles='${escapedSrt}':force_style='FontName=Arial,FontSize=48,PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Shadow=1,Alignment=2,MarginV=100'`);
+          // Windows path: convert to absolute path with forward slashes, escape colons
+          const absoluteSrt = path.resolve(srtPath);
+          const escapedSrt = absoluteSrt.replace(/\\/g, '/').replace(/:/g, '\\\\:');
+          console.log(`🔤 Subtitle path: ${srtPath} -> ${escapedSrt}`);
+          // VIRAL TikTok/Shorts style: BIGGER, BOLDER, MORE VISIBLE
+          // White text with thick black outline, centered, very readable
+          vfChain.push(`subtitles=${escapedSrt}:force_style='FontName=Arial Black,FontSize=38,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H000000,Outline=4,Shadow=3,Alignment=2,MarginV=120'`);
         } else if (script && script.script) {
           // fallback: simple one-line drawtext preview
           const text = (script.script || '').replace(/\n/g, ' ').slice(0, 100).replace(/'/g, "\\'");
-          vfChain.push(`drawtext=text='${text}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.7:boxborderw=8:x=(w-text_w)/2:y=h-150`);
+          vfChain.push(`drawtext=text='${text}':fontcolor=yellow:fontsize=28:box=1:boxcolor=black@0.8:boxborderw=5:x=(w-text_w)/2:y=h-120`);
         }
 
         // Apply video filters
         command.videoFilters(vfChain);
 
-        // Add audio if available and mix volume (narration + bg already mixed upstream)
+        // Add audio if available
         if (normalizedAudioPath && fs.existsSync(normalizedAudioPath)) {
+          console.log(`🎵 Adding audio: ${path.basename(normalizedAudioPath)}`);
           command.input(normalizedAudioPath);
-          command.outputOptions(['-map 0:v:0', '-map 1:a:0']);
+          command.outputOptions(['-map', '0:v:0', '-map', '1:a:0']);
+        } else {
+          console.warn('⚠️  No audio file found, creating silent video');
         }
 
         // Set output path and run the command
