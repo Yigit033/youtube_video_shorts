@@ -5,3 +5,29 @@ logs/
 *.log
 .DS_Store
 Thumbs.db
+
+# Python virtual environment (production'da Docker içinde oluşturulacak)
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Model files (will be downloaded in production)
+models/
+*.pt
+*.pth
+*.onnx
+
+# Test audio files
+*.wav
+*.mp3
+!vctk_voice_samples/**/*.wav
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
