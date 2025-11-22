@@ -1,0 +1,61 @@
+# Node.js
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Python (local venv - production'da Docker içinde oluşturulacak)
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Temporary files
+temp/
+logs/
+*.log
+
+# Environment files (production'da ayrı ayarlanacak)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.map
+
+# Test files
+test/
+*.test.js
+*.spec.js
+
+# Documentation (optional - can be included)
+*.md
+!README.md
+
+# Model files (will be downloaded in production)
+models/
+*.pt
+*.pth
+*.onnx
+
+# Voice samples
+vctk_voice_samples/
+
+# Git
+.git/
+.gitignore
+

@@ -5,19 +5,32 @@ services:
     region: oregon
     plan: free
     buildCommand: docker build -t youtube-shorts-automation .
-    startCommand: docker run -p $PORT:3000 youtube-shorts-automation
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3000
+      - key: TTS_PROVIDER
+        value: coqui
+      - key: COQUI_MODEL
+        value: tts_models/en/vctk/vits
+      - key: COQUI_SPEAKER
+        value: p230
+      - key: COQUI_LENGTH_SCALE
+        value: "2"
+      - key: COQUI_NOISE_SCALE
+        value: "0.667"
       - key: YOUTUBE_CLIENT_ID
         sync: false
       - key: YOUTUBE_CLIENT_SECRET
         sync: false
-      - key: PEXELS_API_KEY
+      - key: YOUTUBE_REDIRECT_URI
         sync: false
-      - key: HUGGINGFACE_API_KEY
+      - key: INSTAGRAM_APP_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: INSTAGRAM_REDIRECT_URI
         sync: false
       - key: CORS_ORIGIN
         value: https://youtube-shorts-automation.onrender.com
