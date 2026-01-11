@@ -17,7 +17,7 @@ services:
       - key: COQUI_SPEAKER
         value: p230
       - key: COQUI_LENGTH_SCALE
-        value: "2"
+        value: "2.0"
       - key: COQUI_NOISE_SCALE
         value: "0.667"
       - key: YOUTUBE_CLIENT_ID

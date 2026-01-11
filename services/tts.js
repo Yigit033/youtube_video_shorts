@@ -40,13 +40,34 @@ class TTSService {
     }
   }
 
-  async generateSpeech(text, filename) {
+  async generateSpeech(text, filename, options = {}) {
     if (!text || typeof text !== 'string') {
       console.warn('⚠️  TTS Service: Invalid text parameter, using fallback text');
       text = 'This is a fallback text for text to speech generation.';
     }
     
+    // Store selected Piper voice if provided
+    this.selectedPiperVoice = options.piperVoice || null;
+    // Store selected Coqui speaker if provided
+    this.selectedCoquiSpeaker = options.coquiSpeaker || null;
+    // Store selected XTTS voice if provided
+    this.selectedXTTSVoice = options.xttsVoice || null;
+    // Store TTS provider preference if provided
+    this.preferredProvider = options.provider || null;
+    
     console.log(`\n[TTS Service] Generating speech for: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+    if (this.preferredProvider && this.preferredProvider !== 'auto') {
+      console.log(`🎯 [TTS] Preferred TTS provider: ${this.preferredProvider}`);
+    }
+    if (this.selectedPiperVoice && this.selectedPiperVoice !== 'auto') {
+      console.log(`🎤 [TTS] Using selected Piper voice: ${this.selectedPiperVoice}`);
+    }
+    if (this.selectedCoquiSpeaker && this.selectedCoquiSpeaker !== 'auto') {
+      console.log(`🎤 [TTS] Using selected Coqui speaker: ${this.selectedCoquiSpeaker}`);
+    }
+    if (this.selectedXTTSVoice && this.selectedXTTSVoice !== 'auto') {
+      console.log(`🎭 [TTS] Using selected XTTS voice: ${this.selectedXTTSVoice}`);
+    }
     const outputPath = path.join(this.outputDir, `${filename}.wav`);
     
     const methods = this.getTTSMethods();
@@ -78,10 +99,30 @@ class TTSService {
   }
 
   getTTSMethods() {
-    // DYNAMIC PRIORITY: Check TTS_PROVIDER env variable first!
-    const preferredProvider = process.env.TTS_PROVIDER || 'gTTS';
+    // PRIORITY LOGIC:
+    // 1. Frontend selection (this.preferredProvider) - ALWAYS has highest priority
+    // 2. Environment variable (process.env.TTS_PROVIDER) - Only used if no frontend selection
+    // 3. Auto mode - Default fallback order
+    
+    const preferredProvider = this.preferredProvider || process.env.TTS_PROVIDER || 'auto';
+    const isFrontendSelection = !!this.preferredProvider; // Check if user explicitly selected from UI
+    
+    if (isFrontendSelection && preferredProvider !== 'auto') {
+      console.log(`🎯 [TTS Priority] Using FRONTEND selection: ${preferredProvider.toUpperCase()} (overriding .env)`);
+    } else if (process.env.TTS_PROVIDER && process.env.TTS_PROVIDER !== 'auto') {
+      console.log(`📋 [TTS Priority] Using .env default: ${process.env.TTS_PROVIDER.toUpperCase()}`);
+    } else {
+      console.log(`🤖 [TTS Priority] Using AUTO mode (best available)`);
+    }
     
     const allMethods = {
+      'xtts': {
+        name: 'XTTS-v2 (Voice Cloning)',
+        func: async (text, outputPath) => this.generateWithXTTS(text, outputPath),
+        description: '✅ VOICE CLONING, MULTILINGUAL, PROFESSIONAL',
+        skip: () => !this.isXTTSInstalled(),
+        skipReason: 'XTTS-v2 not installed'
+      },
       'coqui': {
         name: 'Coqui TTS (Professional)',
         func: async (text, outputPath) => this.generateWithCoqui(text, outputPath),
@@ -130,14 +171,28 @@ class TTSService {
     };
     
     // Build priority list: preferred provider first, then fallbacks
-    const priorityOrder = [
-      preferredProvider.toLowerCase(),
-      'coqui', 'piper', 'gtts', 'windows', 'huggingface', 'espeak', 'silent'
-    ];
+    let priorityOrder;
+    const provider = preferredProvider.toLowerCase();
     
-    // Remove duplicates and build final list
-    const uniqueProviders = [...new Set(priorityOrder)];
-    return uniqueProviders
+    if (provider === 'xtts') {
+      priorityOrder = ['xtts', 'coqui', 'piper', 'gtts', 'windows', 'huggingface', 'espeak', 'silent'];
+    } else if (provider === 'coqui') {
+      priorityOrder = ['coqui', 'xtts', 'piper', 'gtts', 'windows', 'huggingface', 'espeak', 'silent'];
+    } else if (provider === 'piper') {
+      priorityOrder = ['piper', 'coqui', 'xtts', 'gtts', 'windows', 'huggingface', 'espeak', 'silent'];
+    } else if (provider === 'gtts') {
+      priorityOrder = ['gtts', 'coqui', 'xtts', 'piper', 'windows', 'huggingface', 'espeak', 'silent'];
+    } else if (provider === 'windows') {
+      priorityOrder = ['windows', 'gtts', 'coqui', 'xtts', 'piper', 'huggingface', 'espeak', 'silent'];
+    } else if (provider === 'huggingface') {
+      priorityOrder = ['huggingface', 'gtts', 'coqui', 'xtts', 'piper', 'windows', 'espeak', 'silent'];
+    } else {
+      // Default/Auto: Try best available (XTTS-v2 first if installed, then Coqui)
+      priorityOrder = ['xtts', 'coqui', 'piper', 'gtts', 'windows', 'huggingface', 'espeak', 'silent'];
+    }
+    
+    // Build final list
+    return priorityOrder
       .map(key => allMethods[key])
       .filter(method => method); // Remove undefined
   }
@@ -147,11 +202,15 @@ class TTSService {
       console.log('🎤 [gTTS] Generating speech with Google Translate TTS...');
       const gtts = require('gtts');
       
+      // CRITICAL: Preprocess text for natural pauses (punctuation-aware)
+      const preprocessedText = this.preprocessTextForNaturalPauses(text);
+      
       // Split long text into chunks (gTTS has 200 char limit per request)
       const maxChunkLength = 200;
-      if (text.length <= maxChunkLength) {
-        // Use slow=false for more natural, faster speech (less robotic)
-        const gttsInstance = new gtts(text, 'en', { slow: false });
+      if (preprocessedText.length <= maxChunkLength) {
+        // CRITICAL: Changed slow: false → true for slower, more natural speech
+        // slow: true makes speech ~25% slower, more human-like pacing
+        const gttsInstance = new gtts(preprocessedText, 'en', { slow: true });
         const mp3Path = outputPath.replace('.wav', '.mp3');
         return new Promise((resolve, reject) => {
           gttsInstance.save(mp3Path, async (err) => {
@@ -169,8 +228,8 @@ class TTSService {
         });
       } else {
         // Handle long text by splitting into sentences
-        console.log(`📝 [gTTS] Text is long (${text.length} chars), splitting into chunks...`);
-        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        console.log(`📝 [gTTS] Text is long (${preprocessedText.length} chars), splitting into chunks...`);
+        const sentences = preprocessedText.match(/[^.!?]+[.!?]+/g) || [preprocessedText];
         const chunks = [];
         let currentChunk = '';
         
@@ -190,7 +249,8 @@ class TTSService {
         const chunkPaths = [];
         for (let i = 0; i < chunks.length; i++) {
           const chunkPath = outputPath.replace('.wav', `_chunk${i}.mp3`);
-          const gttsInstance = new gtts(chunks[i], 'en', { slow: false }); // Natural speed
+          // CRITICAL: Changed slow: false → true for slower, more natural speech
+          const gttsInstance = new gtts(chunks[i], 'en', { slow: true }); // Slower, more natural speed
           await new Promise((resolve, reject) => {
             gttsInstance.save(chunkPath, (err) => {
               if (err) reject(err);
@@ -246,9 +306,18 @@ class TTSService {
     });
   }
 
+  isXTTSInstalled() {
+    try {
+      const xttsTTS = require('./xttsTTS');
+      return fs.existsSync(xttsTTS.apiScriptPath);
+    } catch (error) {
+      return false;
+    }
+  }
+
   isCoquiInstalled() {
     try {
-      const { execSync } = require('child_process');
+      const { execSync} = require('child_process');
       execSync('tts --help', { stdio: 'ignore' });
       return true;
     } catch (error) {
@@ -281,14 +350,77 @@ class TTSService {
     }
   }
 
+  /**
+   * Script içeriğinden otomatik dil tespiti
+   * Türkçe karakterler (ç, ğ, ı, ö, ş, ü, İ) varsa 'tr', yoksa 'en' döner
+   */
+  detectLanguage(text) {
+    if (!text || typeof text !== 'string') {
+      return 'en'; // Varsayılan
+    }
+    // Türkçe karakterler: ç, ğ, ı, ö, ş, ü, İ
+    const turkishChars = /[çğıöşüÇĞİÖŞÜ]/;
+    if (turkishChars.test(text)) {
+      return 'tr';
+    }
+    return 'en'; // Varsayılan
+  }
+
+  async generateWithXTTS(text, outputPath) {
+    try {
+      const xttsTTS = require('./xttsTTS');
+      // Get selected XTTS voice from options (if provided), otherwise use env variable or default
+      const selectedVoice = this.selectedXTTSVoice || process.env.XTTS_VOICE || 'narrator_sample_2.wav';
+      // AUTOMATIC LANGUAGE DETECTION: Detect from text if not set in env
+      const language = process.env.XTTS_LANGUAGE || this.detectLanguage(text);
+      
+      if (language === 'tr') {
+        console.log(`🌍 [XTTS-v2] Auto-detected language: Turkish (from script content)`);
+      } else {
+        console.log(`🌍 [XTTS-v2] Using language: ${language} (${process.env.XTTS_LANGUAGE ? 'from env' : 'auto-detected'})`);
+      }
+      
+      const options = {
+        speakerWav: path.join(xttsTTS.voiceSamplesDir, selectedVoice),
+        language: language
+      };
+      
+      if (this.selectedXTTSVoice) {
+        console.log(`🎭 [XTTS-v2] Using voice: ${selectedVoice}`);
+      }
+      
+      if (text.length > 500) {
+        return await xttsTTS.generateLongSpeech(text, outputPath, options);
+      } else {
+        return await xttsTTS.generateSpeech(text, outputPath, options);
+      }
+    } catch (error) {
+      throw new Error(`XTTS-v2 failed: ${error.message}`);
+    }
+  }
+
   async generateWithCoqui(text, outputPath) {
     try {
       const coquiTTS = require('./coquiTTS');
+      // Get selected Coqui speaker from options (if provided), otherwise use env variable or default
+      const selectedCoquiSpeaker = this.selectedCoquiSpeaker || process.env.COQUI_SPEAKER || undefined;
+      const options = {
+        model: process.env.COQUI_MODEL || undefined,
+        vocoder: process.env.COQUI_VOCODER || undefined,
+        speaker: selectedCoquiSpeaker, // Use selected speaker if available
+        lengthScale: process.env.COQUI_LENGTH_SCALE || undefined,
+        noiseScale: process.env.COQUI_NOISE_SCALE || undefined,
+        useCuda: ((process.env.USE_CUDA || '').toString().toLowerCase() === 'true')
+      };
+      
+      if (selectedCoquiSpeaker) {
+        console.log(`🎤 [Coqui TTS] Using speaker: ${selectedCoquiSpeaker}`);
+      }
       
       if (text.length > 500) {
-        return await coquiTTS.generateLongSpeech(text, outputPath);
+        return await coquiTTS.generateLongSpeech(text, outputPath, options);
       } else {
-        return await coquiTTS.generateSpeech(text, outputPath);
+        return await coquiTTS.generateSpeech(text, outputPath, options);
       }
     } catch (error) {
       throw new Error(`Coqui TTS failed: ${error.message}`);
@@ -471,7 +603,17 @@ class TTSService {
       try {
         // Use PIPER_PATH (correct) or fallback to PIPER_BIN (legacy)
         const piperBin = process.env.PIPER_PATH || process.env.PIPER_BIN || 'piper';
-        const modelPath = process.env.PIPER_MODEL || process.env.PIPER_VOICE_PATH;
+        
+        // CRITICAL: Use selected voice if provided, otherwise use env variable or default
+        // User selection ALWAYS takes priority over env variable
+        let modelPath = null;
+        if (this.selectedPiperVoice && this.selectedPiperVoice !== 'auto') {
+          modelPath = this.selectedPiperVoice;
+          console.log(`🎤 [Piper] ✅ USER-SELECTED VOICE: ${path.basename(modelPath)} (ignoring PIPER_MODEL env variable)`);
+        } else {
+          modelPath = process.env.PIPER_MODEL || process.env.PIPER_VOICE_PATH;
+          console.log(`🎤 [Piper] Using default voice from env: ${modelPath ? path.basename(modelPath) : 'not set'}`);
+        }
         
         // Check if Piper executable exists
         if (!fs.existsSync(piperBin)) {
@@ -501,7 +643,15 @@ class TTSService {
           const dataDir = path.dirname(espeakData);
           args.push('--data-dir', dataDir);
         }
+        // CRITICAL: Add length_scale parameter for slower, more natural speech
+        // Higher length_scale = slower, more human-like pacing (default: 1.0, improved: 1.25)
+        const piperLengthScale = process.env.PIPER_LENGTH_SCALE || '1.25';
+        args.push('--length_scale', piperLengthScale);
         args.push('--debug');
+        // CRITICAL: Preprocess text for natural pauses (punctuation-aware)
+        // Add extra spaces after punctuation marks for TTS to interpret as pauses
+        const preprocessedText = this.preprocessTextForNaturalPauses(text);
+        
         const piper = spawn(
           piperBin,
           args,
@@ -518,7 +668,7 @@ class TTSService {
             },
           }
         );
-        piper.stdin.write(text);
+        piper.stdin.write(preprocessedText);
         piper.stdin.end();
         piper.on('close', (code) => {
           if (code === 0 && fs.existsSync(outputPath)) {
@@ -533,6 +683,78 @@ class TTSService {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Preprocess text for natural pauses (punctuation-aware)
+   * Similar to Coqui TTS preprocessing but optimized for Piper TTS and gTTS
+   * Adds extra spaces after punctuation marks for TTS to interpret as pauses
+   * 
+   * PROFESSIONAL: Noktalama işaretlerinden sonra daha fazla boşluk ekleniyor
+   * TTS motorları boşlukları doğal duraklamalar olarak yorumlar
+   * Hedef süreler (ARTIRILMIŞ DURAKLAMALAR - DAHA ANLAŞILIR):
+   * - Nokta (.) : 6 boşluk (uzun duraklama ~1.2s)
+   * - Ünlem (!) : 5 boşluk (orta-uzun duraklama ~1.0s)
+   * - Soru (?) : 5 boşluk (orta-uzun duraklama ~1.0s)
+   * - Virgül (,) : 3 boşluk (kısa duraklama ~0.5s)
+   * - Noktalı virgül (;) : 4 boşluk (orta duraklama ~0.7s)
+   * - İki nokta (:) : 3 boşluk (kısa duraklama ~0.5s)
+   * - Em dash (—) : 6 boşluk (uzun duraklama ~1.2s)
+   */
+  preprocessTextForNaturalPauses(text) {
+    if (!text || typeof text !== 'string') return text;
+    
+    let processedText = text;
+    
+    // CRITICAL: Ellipsis'leri em dash (—) ile değiştir
+    // PROFESSIONAL: Em dash'ten sonra 6 boşluk ekle (uzun duraklama ~1.2s)
+    processedText = processedText.replace(/…/g, ' —      ');
+    processedText = processedText.replace(/\.\.\./g, ' —      ');
+    
+    // PROFESSIONAL: Mevcut em dash'lerden sonra 6 boşluk ekle (uzun duraklama ~1.2s)
+    processedText = processedText.replace(/—([^\s\n])/g, '—      $1');
+    processedText = processedText.replace(/—\s([^\s\n])/g, '—      $1');
+    processedText = processedText.replace(/—\s{2}([^\s\n])/g, '—      $1');
+    processedText = processedText.replace(/—\s{3}([^\s\n])/g, '—      $1');
+    processedText = processedText.replace(/—\s{4}([^\s\n])/g, '—      $1');
+    processedText = processedText.replace(/—\s{5}([^\s\n])/g, '—      $1');
+    
+    // PROFESSIONAL: Noktadan sonra 6 boşluk ekle (uzun duraklama ~1.2s)
+    processedText = processedText.replace(/\.([^\s\n])/g, '.      $1');
+    processedText = processedText.replace(/\.\s([^\s\n])/g, '.      $1');
+    processedText = processedText.replace(/\.\s{2}([^\s\n])/g, '.      $1');
+    processedText = processedText.replace(/\.\s{3}([^\s\n])/g, '.      $1');
+    processedText = processedText.replace(/\.\s{4}([^\s\n])/g, '.      $1');
+    processedText = processedText.replace(/\.\s{5}([^\s\n])/g, '.      $1');
+    
+    // PROFESSIONAL: Soru işareti ve ünlem işaretinden sonra 5 boşluk ekle (orta-uzun duraklama ~1.0s)
+    processedText = processedText.replace(/([!?])([^\s\n])/g, '$1     $2');
+    processedText = processedText.replace(/([!?])\s([^\s\n])/g, '$1     $2');
+    processedText = processedText.replace(/([!?])\s{2}([^\s\n])/g, '$1     $2');
+    processedText = processedText.replace(/([!?])\s{3}([^\s\n])/g, '$1     $2');
+    processedText = processedText.replace(/([!?])\s{4}([^\s\n])/g, '$1     $2');
+    
+    // PROFESSIONAL: Virgülden sonra 3 boşluk ekle (kısa duraklama ~0.5s)
+    processedText = processedText.replace(/,([^\s\n])/g, ',   $1');
+    processedText = processedText.replace(/,\s([^\s\n])/g, ',   $1');
+    processedText = processedText.replace(/,\s{2}([^\s\n])/g, ',   $1');
+    
+    // PROFESSIONAL: Noktalı virgülden sonra 4 boşluk ekle (orta duraklama ~0.7s)
+    processedText = processedText.replace(/;([^\s\n])/g, ';    $1');
+    processedText = processedText.replace(/;\s([^\s\n])/g, ';    $1');
+    processedText = processedText.replace(/;\s{2}([^\s\n])/g, ';    $1');
+    processedText = processedText.replace(/;\s{3}([^\s\n])/g, ';    $1');
+    
+    // PROFESSIONAL: İki nokta üst üsteden sonra 3 boşluk ekle (kısa duraklama ~0.5s)
+    processedText = processedText.replace(/:([^\s\n])/g, ':   $1');
+    processedText = processedText.replace(/:\s([^\s\n])/g, ':   $1');
+    processedText = processedText.replace(/:\s{2}([^\s\n])/g, ':   $1');
+    
+    // Fazla boşlukları temizle (8+ boşluk → 6 boşluk, 7 boşluk → 6 boşluk)
+    processedText = processedText.replace(/\s{8,}/g, '      ');
+    processedText = processedText.replace(/\s{7}/g, '      ');
+    
+    return processedText.trim();
   }
 
   async convertToWAV(inputPath, outputPath) {

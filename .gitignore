@@ -1,33 +1,207 @@
-node_modules
+# ============================================
+# YOUTUBE SHORTS AUTOMATION PLATFORM
+# .gitignore - GitHub Push Öncesi Güvenlik
+# ============================================
+
+# ==========================================
+# 🔴 KRİTİK - HASSAS DOSYALAR (ASLA PUSHLANMAZ)
+# ==========================================
+
+# OAuth Token Dosyaları
+**/youtube_tokens.json
+**/youtube_accounts.json
+**/instagram_accounts.json
+**/tiktok_accounts.json
+**/oauth_tokens*.json
+**/*_tokens.json
+**/*_accounts.json
+
+# Environment Dosyaları
 .env
+.env.local
+.env.development
+.env.production
+.env*.local
+*.env
+
+# Credential Dosyaları
+credentials.json
+client_secret*.json
+service_account*.json
+*.pem
+*.key
+*.p12
+
+# ==========================================
+# 📁 BÜYÜK DOSYALAR VE KLASÖRLER
+# ==========================================
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python Virtual Environment
+venv/
+.venv/
+env/
+.env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# 🎬 MEDYA VE TEMP DOSYALARI
+# ==========================================
+
+# Temp Klasörü (tüm geçici dosyalar)
 temp/
+tmp/
+
+# Çıktı Dosyaları
+output/
+outputs/
+
+# Log Dosyaları
 logs/
 *.log
-.DS_Store
-Thumbs.db
 
-# Python virtual environment (production'da Docker içinde oluşturulacak)
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
+# Medya Dosyaları (büyük boyut)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.mp3
+*.wav
+*.ogg
+*.flac
 
-# Model files (will be downloaded in production)
-models/
+# Resim Dosyaları (temp)
+temp/**/*.png
+temp/**/*.jpg
+temp/**/*.jpeg
+temp/**/*.gif
+temp/**/*.webp
+
+# ==========================================
+# 🤖 AI/ML MODEL DOSYALARI
+# ==========================================
+
+# XTTS-v2 Model Dosyaları
+*.onnx
+*.onnx.json
 *.pt
 *.pth
-*.onnx
+*.bin
+*.safetensors
+*.h5
+*.hdf5
+*.pkl
+*.pickle
 
-# Test audio files
-*.wav
-*.mp3
-!vctk_voice_samples/**/*.wav
+# Hugging Face Cache
+.cache/
+huggingface/
 
-# IDE
+# AI/ML Model Klasörleri (çok büyük - 6+ GB)
+models/
+faster-whisper/
+whisper/
+
+# ==========================================
+# 💻 IDE VE OS DOSYALARI
+# ==========================================
+
+# Visual Studio Code
 .vscode/
+*.code-workspace
+
+# JetBrains IDEs
 .idea/
-*.swp
-*.swo
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
 *~
+.directory
+
+# ==========================================
+# 📦 BUILD VE DIST
+# ==========================================
+
+dist/
+build/
+*.tgz
+*.tar.gz
+*.zip
+
+# ==========================================
+# 🔧 PROJE-SPESİFİK İSTİSNALAR
+# ==========================================
+
+# Voice Samples - KİŞİSEL SES KLONLAMA (hariç tut)
+# Bu dosyalar kişisel ve büyük boyutlu (~45MB)
+# Kullanıcılar kendi ses örneklerini oluşturmalı
+voice_samples/
+vctk_voice_samples/
+xtts_v2_samples/
+
+# Video Outro - KİŞİSEL (hariç tut)
+# temp/ zaten ignore ediliyor
+
+# LUT Dosyaları - BUNLARI DAHIL ET
+!luts/
+!luts/*.cube
+
+# Public Assets - BUNLARI DAHIL ET
+!public/
+!public/**
+
+# Config Dosyaları (hassas olmayan) - BUNLARI DAHIL ET
+!config/production.js
+
+# ==========================================
+# 📝 DOKÜMANTASYON (opsiyonel)
+# ==========================================
+
+# Eğer MD dosyalarını dahil etmek istemiyorsan:
+# *.md
+# !README.md
+
+# ==========================================
+# 🧪 TEST DOSYALARI
+# ==========================================
+
+coverage/
+.nyc_output/
+test-results/
+*.test.js.snap
+
+# ==========================================
+# 📊 MISC
+# ==========================================
+
+# Package lock (opsiyonel - genelde dahil edilir)
+# package-lock.json
+
+# Yarn
+.yarn/
+.pnp.*

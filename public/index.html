@@ -23,6 +23,147 @@
         .progress-bar {
             transition: width 0.5s ease-in-out;
         }
+        #reupload-confirm {
+            background-color: #2563eb !important;
+            color: #ffffff !important;
+            border: none !important;
+            cursor: pointer !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: flex !important;
+        }
+        #reupload-confirm:hover {
+            background-color: #1d4ed8 !important;
+        }
+        #reupload-confirm:active {
+            background-color: #1e40af !important;
+        }
+        /* Step Wizard Styles */
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            position: relative;
+        }
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #e5e7eb;
+            z-index: 0;
+        }
+        .step-item {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .step-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            border: 3px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 8px;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        .step-item.active .step-circle {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: #667eea;
+            color: white;
+            transform: scale(1.1);
+        }
+        .step-item.completed .step-circle {
+            background: #10b981;
+            border-color: #10b981;
+            color: white;
+        }
+        .step-item.completed .step-circle::after {
+            content: '✓';
+        }
+        .step-label {
+            font-size: 0.75rem;
+            color: #6b7280;
+            font-weight: 500;
+        }
+        .step-item.active .step-label {
+            color: #667eea;
+            font-weight: 600;
+        }
+        .step-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .step-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Modern Progress Styles */
+        .progress-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: conic-gradient(from 0deg, #667eea 0%, #e5e7eb 0%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            margin: 0 auto 1rem;
+        }
+        .progress-circle::before {
+            content: '';
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: white;
+            position: absolute;
+        }
+        .progress-text {
+            position: relative;
+            z-index: 1;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+        .step-card {
+            background: #f9fafb;
+            border-left: 4px solid #e5e7eb;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        .step-card.active {
+            background: #eff6ff;
+            border-left-color: #667eea;
+        }
+        .step-card.completed {
+            background: #f0fdf4;
+            border-left-color: #10b981;
+        }
+        /* Smooth transitions */
+        .mode-transition {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Custom mode styling */
+        .custom-mode-active {
+            border-color: #9333ea;
+            background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+        }
+        .ai-mode-active {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        }
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -40,8 +181,9 @@
 
     <div class="container mx-auto px-4 py-8">
         <!-- Authentication Status -->
-        <div id="auth-status" class="mb-8">
-            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <!-- YouTube Authentication -->
+            <div id="auth-status" class="bg-white rounded-lg shadow-md p-6 card-hover">
                 <h3 class="text-lg font-semibold mb-4 flex items-center">
                     <i class="fab fa-youtube text-red-600 mr-2"></i>
                     YouTube Authentication
@@ -49,6 +191,34 @@
                 <div id="auth-content">
                     <div class="flex items-center justify-center py-4">
                         <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                        <span class="ml-2">Checking authentication status...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Instagram Authentication -->
+            <div id="instagram-auth-status" class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fab fa-instagram text-pink-600 mr-2"></i>
+                    Instagram Authentication
+                </h3>
+                <div id="instagram-auth-content">
+                    <div class="flex items-center justify-center py-4">
+                        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-pink-600"></div>
+                        <span class="ml-2">Checking authentication status...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TikTok Authentication -->
+            <div id="tiktok-auth-status" class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fab fa-tiktok text-black mr-2"></i>
+                    TikTok Authentication
+                </h3>
+                <div id="tiktok-auth-content">
+                    <div class="flex items-center justify-center py-4">
+                        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-black"></div>
                         <span class="ml-2">Checking authentication status...</span>
                     </div>
                 </div>
@@ -80,38 +250,420 @@
         <!-- Main Form -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- AI Generation Form -->
-            <div id="ai-form" class="bg-white rounded-lg shadow-md p-6 card-hover">
-                <h2 class="text-2xl font-bold mb-6 text-gray-800">
+            <div id="ai-form" class="bg-white rounded-lg shadow-md p-6 card-hover mode-transition">
+                <!-- Dynamic Header -->
+                <div class="mb-6">
+                    <h2 id="form-title" class="text-2xl font-bold mb-2 text-gray-800">
                     <i class="fas fa-magic mr-2 text-purple-600"></i>
-                    Generate YouTube Shorts
+                        <span id="title-text">Video Creation Studio</span>
                 </h2>
+                    <p id="form-subtitle" class="text-sm text-gray-600">
+                        <span id="subtitle-text">AI-Powered Content Generation</span>
+                    </p>
+                </div>
+
+                <!-- Custom Input Mode Toggle -->
+                <div class="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 hover:border-purple-400 transition-all duration-300">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="custom-input-mode" class="mr-3 w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500">
+                        <div class="flex-1">
+                            <span class="text-base font-semibold text-gray-800 flex items-center">
+                                <i class="fas fa-upload mr-2 text-purple-600"></i>
+                                Use Custom Input Mode
+                            </span>
+                            <p class="text-xs text-gray-600 mt-1 ml-7">Upload your own images, script, and music instead of AI generation</p>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Quick Preset Buttons (Custom Mode Only) -->
+                <div id="preset-buttons-section" class="hidden mb-6">
+                    <div class="p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200 shadow-sm">
+                        <label class="block text-sm font-semibold text-gray-800 mb-3 flex items-center">
+                            <i class="fas fa-magic mr-2 text-purple-600"></i>
+                            Quick Preset
+                            <span class="ml-2 px-2 py-0.5 bg-purple-500 text-white text-xs rounded-full">NEW</span>
+                        </label>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <button
+                                type="button"
+                                id="preset-tr-youtube"
+                                class="preset-btn px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all duration-200 flex flex-col items-center justify-center gap-1 shadow-md hover:shadow-lg transform hover:scale-105"
+                            >
+                                <span class="text-lg">🇹🇷</span>
+                                <span class="text-sm font-semibold">TR YouTube</span>
+                                <span class="text-xs opacity-80">1920x1080</span>
+                            </button>
+                            <button
+                                type="button"
+                                id="preset-tr-shorts"
+                                class="preset-btn px-4 py-3 bg-red-400 hover:bg-red-500 text-white rounded-lg transition-all duration-200 flex flex-col items-center justify-center gap-1 shadow-md hover:shadow-lg transform hover:scale-105"
+                            >
+                                <span class="text-lg">🇹🇷</span>
+                                <span class="text-sm font-semibold">TR Shorts</span>
+                                <span class="text-xs opacity-80">1080x1920</span>
+                            </button>
+                            <button
+                                type="button"
+                                id="preset-en-youtube"
+                                class="preset-btn px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-all duration-200 flex flex-col items-center justify-center gap-1 shadow-md hover:shadow-lg transform hover:scale-105"
+                            >
+                                <span class="text-lg">🇬🇧</span>
+                                <span class="text-sm font-semibold">EN YouTube</span>
+                                <span class="text-xs opacity-80">1920x1080</span>
+                            </button>
+                            <button
+                                type="button"
+                                id="preset-en-shorts"
+                                class="preset-btn px-4 py-3 bg-blue-400 hover:bg-blue-500 text-white rounded-lg transition-all duration-200 flex flex-col items-center justify-center gap-1 shadow-md hover:shadow-lg transform hover:scale-105"
+                            >
+                                <span class="text-lg">🇬🇧</span>
+                                <span class="text-sm font-semibold">EN Shorts</span>
+                                <span class="text-xs opacity-80">1080x1920</span>
+                            </button>
+                        </div>
+                        <p class="mt-3 text-xs text-gray-600 flex items-center">
+                            <i class="fas fa-info-circle mr-1 text-purple-500"></i>
+                            Select a preset to auto-configure Video Format, TTS Engine, Voice, and Thumbnail settings.
+                        </p>
+                        <div id="preset-status" class="hidden mt-2 p-2 rounded-lg text-sm font-medium text-center"></div>
+                    </div>
+                </div>
+
+                <!-- Step Indicator -->
+                <div class="step-indicator mb-8">
+                    <div class="step-item active" data-step="1">
+                        <div class="step-circle">1</div>
+                        <div class="step-label">Content</div>
+                    </div>
+                    <div class="step-item" data-step="2">
+                        <div class="step-circle">2</div>
+                        <div class="step-label">Media & Audio</div>
+                    </div>
+                    <div class="step-item" data-step="3">
+                        <div class="step-circle">3</div>
+                        <div class="step-label">Settings</div>
+                    </div>
+                    <div class="step-item" data-step="4">
+                        <div class="step-circle">4</div>
+                        <div class="step-label">Advanced</div>
+                    </div>
+                </div>
                 
-                <form id="shorts-form" class="space-y-6">
+                <form id="shorts-form" class="space-y-6" enctype="multipart/form-data">
+
+                    <!-- STEP 1: Content Setup -->
+                    <div class="step-content active" data-step="1">
+                        <div class="mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                                <i class="fas fa-file-alt mr-2 text-blue-600"></i>
+                                Content Setup
+                            </h3>
+                        </div>
+
+                        <!-- JSON Import Section (Custom Mode) -->
+                        <div id="json-import-section" class="mb-6 hidden">
+                            <div class="p-4 bg-gradient-to-r from-indigo-100 to-purple-100 rounded-lg border-2 border-indigo-300">
+                                <label class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-file-import mr-2 text-indigo-600"></i>
+                                    Quick Import (JSON)
+                                    <span class="ml-2 px-2 py-0.5 bg-indigo-500 text-white text-xs rounded-full">NEW</span>
+                                </label>
+                                <div class="flex gap-2">
+                                    <input
+                                        type="file"
+                                        id="json-import-file"
+                                        accept=".json,application/json"
+                                        class="hidden"
+                                    >
+                                    <button
+                                        type="button"
+                                        id="json-import-btn"
+                                        class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                        <i class="fas fa-upload"></i>
+                                        Import JSON File
+                                    </button>
+                                    <button
+                                        type="button"
+                                        id="json-paste-btn"
+                                        class="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                        <i class="fas fa-paste"></i>
+                                        Paste JSON
+                                    </button>
+                                </div>
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-indigo-500"></i>
+                                    Import title, description, script, tags from a JSON file. Media files still need manual upload.
+                                </p>
+                                <div id="json-import-status" class="hidden mt-2 p-2 rounded-lg text-sm"></div>
+                            </div>
+                        </div>
+
+                        <!-- Custom Script Input (Custom Mode) -->
+                        <div id="custom-script-section" class="mb-6 hidden">
+                            <label for="custom-script" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-file-text mr-2 text-purple-500"></i>
+                                Custom Script
+                                <span class="ml-2 text-red-500">*</span>
+                            </label>
+                            <textarea
+                                id="custom-script"
+                                name="customScript"
+                                rows="8"
+                                placeholder="Enter your script here... This is required for custom mode."
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                            ></textarea>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Enter your script. This will be used for narration.
+                            </p>
+                            <!-- Duration Analysis Panel -->
+                            <div id="duration-analysis" class="mt-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200 shadow-sm">
+                                <div class="flex items-center justify-between flex-wrap gap-2">
+                                    <div class="flex items-center">
+                                        <span class="text-sm font-semibold text-gray-700 mr-2">📊 Media:</span>
+                                        <span id="media-duration" class="text-sm font-medium text-gray-600">-</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <span class="text-sm font-semibold text-gray-700 mr-2">📝 Script:</span>
+                                        <span id="script-duration" class="text-sm font-medium text-gray-600">-</span>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <span class="text-sm font-semibold text-blue-700 mr-2">🎯 Total:</span>
+                                        <span id="total-duration" class="text-sm font-bold text-blue-700">-</span>
+                                    </div>
+                                </div>
+                                <div id="duration-warning" class="mt-2 text-xs text-orange-600 font-medium hidden"></div>
+                            </div>
+                        </div>
+
+                        <!-- AI Mode: Topic Input -->
+                        <div id="ai-topic-section" class="space-y-4 p-4 bg-blue-50 rounded-lg border-2 border-blue-200 ai-mode-active">
                     <div>
-                        <label for="topic" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-lightbulb mr-1 text-yellow-500"></i>
+                                <label for="topic" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-lightbulb mr-2 text-yellow-500"></i>
                             Topic / Keyword
+                                    <span class="ml-2 text-red-500">*</span>
                         </label>
                         <input
                             type="text"
                             id="topic"
                             name="topic"
-                            required
                             placeholder="e.g., space exploration, cooking tips, technology"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                    class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    Required if custom script is not provided
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- NEW: Video Style -->
+                    <!-- STEP 2: Media & Audio -->
+                    <div class="step-content" data-step="2">
+                        <div class="mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                                <i class="fas fa-images mr-2 text-green-600"></i>
+                                Media & Audio
+                            </h3>
+                        </div>
+
+                        <!-- Custom Input Section (Hidden by default) -->
+                        <div id="custom-input-section" class="hidden space-y-4 p-4 bg-purple-50 rounded-lg border-2 border-purple-200 custom-mode-active">
+                            <!-- Custom Images Upload -->
                     <div>
-                        <label for="video-style" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-palette mr-1 text-pink-500"></i>
+                                <label for="custom-images" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-images mr-2 text-green-500"></i>
+                                    Upload Your Images (Optional)
+                                </label>
+                                <input
+                                    type="file"
+                                    id="custom-images"
+                                    name="customImages"
+                                    multiple
+                                    accept="image/*"
+                                    class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                >
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    Upload any number of images (recommended: 15-25 for 2min videos). If provided, AI won't search for images.
+                                </p>
+                                <p class="mt-1 text-xs text-blue-600 flex items-center">
+                                    <i class="fas fa-sort mr-1"></i>
+                                    Images will be used in upload order. Drag to reorder after upload.
+                                </p>
+                                <div id="image-preview" class="mt-2 grid grid-cols-4 gap-2"></div>
+                            </div>
+
+                            <!-- Custom Videos Upload -->
+                            <div>
+                                <label for="custom-videos" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-video mr-2 text-blue-500"></i>
+                                    Upload Your Videos (Optional)
+                                </label>
+                                <input
+                                    type="file"
+                                    id="custom-videos"
+                                    name="customVideos"
+                                    multiple
+                                    accept="video/*"
+                                    class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    Upload 8-second videos (recommended: 5-10 videos). Videos will be trimmed/looped to exactly 8 seconds.
+                                </p>
+                                <p class="mt-1 text-xs text-blue-600 flex items-center">
+                                    <i class="fas fa-sort mr-1"></i>
+                                    Videos will be mixed with images. Drag to reorder after upload.
+                                </p>
+                                <div id="video-preview" class="mt-2 grid grid-cols-4 gap-2"></div>
+                            </div>
+
+                            <!-- Media Preview (Combined Images + Videos) -->
+                            <div id="media-preview-section" class="hidden">
+                                <label class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-sort mr-2 text-orange-500"></i>
+                                    Media Sequence (Drag to Reorder)
+                                </label>
+                                <div id="media-preview" class="mt-2 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    Drag and drop to reorder. Files are processed in upload order. Final video will follow this sequence.
+                                </p>
+                            </div>
+
+                            <!-- Custom Music Upload -->
+                            <div>
+                                <label for="custom-music" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-music mr-2 text-pink-500"></i>
+                                    Upload Your Music (Optional)
+                                </label>
+                                <input
+                                    type="file"
+                                    id="custom-music"
+                                    name="customMusic"
+                                    accept="audio/*"
+                                    class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+                                >
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    Upload background music. If provided, AI won't search for music.
+                                </p>
+                            </div>
+
+                            <!-- Custom Title Input -->
+                            <div>
+                                <label for="custom-title" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-heading mr-2 text-blue-500"></i>
+                                    Custom Title (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="custom-title"
+                                    name="customTitle"
+                                    placeholder="Enter your video title here..."
+                                    maxlength="100"
+                                    class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    If provided, AI won't generate a title. Leave empty to use AI-generated title. Max 100 characters.
+                                </p>
+                            </div>
+
+                            <!-- Custom Description Input -->
+                            <div>
+                                <label for="custom-description" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-align-left mr-2 text-indigo-500"></i>
+                                    Custom Description (Optional)
+                                </label>
+                                <textarea
+                                    id="custom-description"
+                                    name="customDescription"
+                                    rows="6"
+                                    placeholder="Enter your video description here..."
+                                    maxlength="5000"
+                                    class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                ></textarea>
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    If provided, AI won't generate a description. Leave empty to use AI-generated description. Max 5000 characters.
+                                </p>
+                            </div>
+
+                            <!-- Custom Tags Input -->
+                            <div>
+                                <label for="custom-tags" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                    <i class="fas fa-tags mr-2 text-purple-500"></i>
+                                    Custom Tags (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="custom-tags"
+                                    name="customTags"
+                                    placeholder="Enter tags separated by commas (e.g., history, documentary, facts, education)"
+                                    class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                >
+                                <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                    If provided, AI won't generate tags. Leave empty to use AI-generated tags. Max 15 tags.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- AI Mode: No media upload needed (AI will generate) -->
+                        <div id="ai-media-section" class="p-6 bg-blue-50 rounded-lg border-2 border-blue-200 ai-mode-active text-center">
+                            <i class="fas fa-magic text-4xl text-blue-500 mb-3"></i>
+                            <p class="text-gray-700 font-medium">AI will automatically generate images and music based on your topic and style preferences.</p>
+                            <p class="text-sm text-gray-600 mt-2">You can proceed to the next step to configure video settings.</p>
+                        </div>
+                    </div>
+
+                    <!-- STEP 3: Video Settings -->
+                    <div class="step-content" data-step="3">
+                        <div class="mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                                <i class="fas fa-cog mr-2 text-orange-600"></i>
+                                Video Settings
+                            </h3>
+                        </div>
+
+                        <!-- Video Format Selection -->
+                        <div class="mb-6">
+                            <label for="video-format" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-video mr-2 text-red-500"></i>
+                                Video Format
+                                <span class="ml-2 text-red-500">*</span>
+                            </label>
+                            <select
+                                id="video-format"
+                                name="videoFormat"
+                                required
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            >
+                                <option value="shorts">📱 YouTube Shorts (1080x1920 - Dikey)</option>
+                                <option value="youtube">📺 YouTube Video (1920x1080 - Yatay)</option>
+                            </select>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Shorts için dikey, normal video için yatay format
+                            </p>
+                        </div>
+
+                        <!-- AI Mode Only: Video Style -->
+                        <div id="ai-video-style-section" class="mb-6">
+                            <label for="video-style" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-palette mr-2 text-pink-500"></i>
                             Video Style / Tone
                         </label>
                         <select
                             id="video-style"
                             name="videoStyle"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                             <option value="entertaining">🎉 Entertaining - Fun & Engaging</option>
                             <option value="educational">📚 Educational - Informative</option>
@@ -120,19 +672,22 @@
                             <option value="controversial">🔥 Controversial - Attention-Grabbing</option>
                             <option value="quick-tips">⚡ Quick Tips - Fast & Practical</option>
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">Choose the tone and style of your video</p>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Choose the tone and style of your video
+                            </p>
                     </div>
 
-                    <!-- NEW: Target Audience -->
-                    <div>
-                        <label for="target-audience" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-users mr-1 text-indigo-500"></i>
+                        <!-- AI Mode Only: Target Audience -->
+                        <div id="ai-target-audience-section" class="mb-6">
+                            <label for="target-audience" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-users mr-2 text-indigo-500"></i>
                             Target Audience
                         </label>
                         <select
                             id="target-audience"
                             name="targetAudience"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                             <option value="gen-z">👾 Gen-Z (16-24) - TikTok Style</option>
                             <option value="millennials">💼 Millennials (25-40) - Professional</option>
@@ -140,37 +695,44 @@
                             <option value="professionals">👔 Professionals - Business</option>
                             <option value="students">🎓 Students - Educational</option>
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">Who is your target viewer?</p>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Who is your target viewer?
+                            </p>
                     </div>
 
-                    <!-- NEW: Video Duration -->
-                    <div>
-                        <label for="video-duration" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-clock mr-1 text-orange-500"></i>
+                        <!-- Video Duration -->
+                        <div id="video-duration-container" class="mb-6">
+                            <label for="video-duration" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-clock mr-2 text-orange-500"></i>
                             Video Duration
                         </label>
                         <select
                             id="video-duration"
                             name="videoDuration"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                             <option value="15-30s">🚀 15-30 seconds - Ultra Short</option>
                             <option value="30-45s" selected>⚡ 30-45 seconds - Recommended</option>
                             <option value="45-60s">📺 45-60 seconds - Maximum</option>
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">Shorter videos often perform better</p>
+                            <p class="mt-2 text-xs text-gray-600" id="video-duration-hint">Shorter videos often perform better</p>
+                            <p class="mt-1 text-xs text-blue-600 hidden" id="video-duration-auto">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                Duration will be calculated automatically based on your image count
+                            </p>
                     </div>
 
-                    <!-- NEW: Mood -->
-                    <div>
-                        <label for="mood" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-smile mr-1 text-yellow-500"></i>
+                        <!-- AI Mode Only: Mood -->
+                        <div id="ai-mood-section" class="mb-6">
+                            <label for="mood" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-smile mr-2 text-yellow-500"></i>
                             Mood / Energy
                         </label>
                         <select
                             id="mood"
                             name="mood"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                             <option value="energetic">⚡ Energetic - Fast & Dynamic</option>
                             <option value="calm">😌 Calm - Relaxing & Smooth</option>
@@ -178,19 +740,178 @@
                             <option value="upbeat">🎵 Upbeat - Positive & Happy</option>
                             <option value="serious">🎯 Serious - Professional & Focused</option>
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">Sets the overall vibe of the video</p>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Sets the overall vibe of the video
+                            </p>
                     </div>
 
-                    <!-- NEW: CTA Type -->
-                    <div>
-                        <label for="cta-type" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-bullhorn mr-1 text-red-500"></i>
+                        <!-- Thumbnail Upload (Only for YouTube normal videos) -->
+                        <div id="thumbnail-upload-section" class="mb-6 hidden">
+                            <label for="custom-thumbnail" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-image mr-2 text-orange-500"></i>
+                                Custom Thumbnail (Optional)
+                            </label>
+                            <input
+                                type="file"
+                                id="custom-thumbnail"
+                                name="customThumbnail"
+                                accept="image/jpeg,image/png,image/jpg"
+                                class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                            >
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Upload a custom thumbnail for your YouTube video (JPEG/PNG, recommended: 1280x720)
+                            </p>
+                            <div id="thumbnail-preview" class="mt-2 hidden">
+                                <img id="thumbnail-preview-img" src="" alt="Thumbnail preview" class="max-w-full h-auto rounded-lg border border-gray-300" style="max-height: 200px;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- STEP 4: Advanced Options -->
+                    <div class="step-content" data-step="4">
+                        <div class="mb-4">
+                            <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                                <i class="fas fa-sliders-h mr-2 text-purple-600"></i>
+                                Advanced Options
+                            </h3>
+                        </div>
+
+                        <!-- TTS Voice Selection (Piper) -->
+                        <div class="mb-6">
+                            <label for="tts-voice" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-microphone mr-2 text-green-500"></i>
+                                TTS Voice (Piper)
+                            </label>
+                            <select
+                                id="tts-voice"
+                                name="ttsVoice"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            >
+                                <option value="auto">🎤 Auto (Default Voice)</option>
+                                <!-- Voice options will be loaded dynamically -->
+                            </select>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Piper TTS ses seçimi (lokal seslerinizden)
+                            </p>
+                            <button
+                                type="button"
+                                id="refresh-voices-btn"
+                                class="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+                            >
+                                🔄 Refresh Voice List
+                            </button>
+                        </div>
+
+                        <!-- TTS Provider Selection -->
+                        <div class="mb-6">
+                            <label for="tts-provider" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-microphone mr-2 text-indigo-500"></i>
+                                TTS Engine / Ses Motoru
+                            </label>
+                            <select
+                                id="tts-provider"
+                                name="ttsProvider"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
+                            >
+                                <option value="auto">🤖 Auto (Best Available)</option>
+                                <option value="xtts">🎭 XTTS-v2 (Voice Cloning - AI)</option>
+                                <option value="coqui">🎤 Coqui TTS (VCTK Voices)</option>
+                                <option value="piper">🔊 Piper TTS</option>
+                                <option value="gtts">🌍 Google TTS</option>
+                            </select>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Select which TTS engine to use (Auto tries XTTS-v2 first)
+                            </p>
+                        </div>
+
+                        <!-- XTTS-v2 Voice Selection -->
+                        <div class="mb-6" id="xtts-voice-section">
+                            <label for="xtts-voice" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-clone mr-2 text-green-500"></i>
+                                XTTS-v2 Voice (Cloning)
+                            </label>
+                            <select
+                                id="xtts-voice"
+                                name="xttsVoice"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                            >
+                                <option value="auto">🎤 Auto (Default - Narrator Sample 2)</option>
+                                <!-- Voice options will be loaded dynamically -->
+                            </select>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                XTTS-v2 voice cloning - Professional narrator voices
+                            </p>
+                            <button
+                                type="button"
+                                id="refresh-xtts-voices-btn"
+                                class="mt-2 text-xs text-green-600 hover:text-green-800 underline"
+                            >
+                                🔄 Refresh XTTS Voice List
+                            </button>
+                        </div>
+
+                        <!-- Coqui TTS Voice Selection -->
+                        <div class="mb-6" id="coqui-voice-section">
+                            <label for="coqui-voice" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-microphone-alt mr-2 text-purple-500"></i>
+                                Coqui Voice (VCTK)
+                            </label>
+                            <select
+                                id="coqui-voice"
+                                name="coquiVoice"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200"
+                            >
+                                <option value="auto">🎤 Auto (Default Voice - p230)</option>
+                                <!-- Voice options will be loaded dynamically -->
+                            </select>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Coqui TTS ses seçimi (VCTK modelinden)
+                            </p>
+                            <button
+                                type="button"
+                                id="refresh-coqui-voices-btn"
+                                class="mt-2 text-xs text-purple-600 hover:text-purple-800 underline"
+                            >
+                                🔄 Refresh Coqui Voice List
+                            </button>
+                        </div>
+
+                        <!-- Subtitles Option -->
+                        <div class="mb-6">
+                            <label for="subtitles-enabled" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-closed-captioning mr-2 text-blue-500"></i>
+                                Subtitles / Altyazı
+                            </label>
+                            <select
+                                id="subtitles-enabled"
+                                name="subtitlesEnabled"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            >
+                                <option value="true" selected>✅ Yes - Add Subtitles</option>
+                                <option value="false">❌ No - Audio Only</option>
+                            </select>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                Add subtitles to your video?
+                            </p>
+                        </div>
+
+                        <!-- CTA Type -->
+                        <div class="mb-6">
+                            <label for="cta-type" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-bullhorn mr-2 text-red-500"></i>
                             Call-to-Action
                         </label>
                         <select
                             id="cta-type"
                             name="ctaType"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                             <option value="follow">👍 Follow for More</option>
                             <option value="comment">💬 Comment Below</option>
@@ -198,18 +919,63 @@
                             <option value="watch-more">👀 Watch Till End</option>
                             <option value="none">🚫 No CTA</option>
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">How should viewers engage?</p>
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1 text-blue-500"></i>
+                                How should viewers engage?
+                            </p>
                     </div>
 
-                    <div>
-                        <label for="count" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-copy mr-1 text-blue-500"></i>
+                        <!-- Cross-post to Instagram -->
+                        <div id="cross-post-instagram-section" class="mb-6">
+                            <label class="flex items-center p-4 border-2 border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-all">
+                                <input
+                                    type="checkbox"
+                                    id="cross-post-instagram"
+                                    name="crossPostToInstagram"
+                                    class="w-5 h-5 text-pink-600 border-gray-300 rounded focus:ring-pink-500"
+                                >
+                                <div class="ml-3 flex-1">
+                                    <div class="flex items-center">
+                                        <i class="fab fa-instagram text-pink-600 mr-2"></i>
+                                        <span class="text-sm font-semibold text-gray-800">Cross-post to Instagram</span>
+                                    </div>
+                                    <p class="text-xs text-gray-600 mt-1">Automatically upload to Instagram Reels after YouTube Shorts upload (requires Instagram account)</p>
+                                    <p id="cross-post-warning" class="text-xs text-orange-600 mt-1 font-medium hidden">
+                                        ⚠️ Only available for YouTube Shorts format (Instagram Reels limit: 90 seconds)
+                                    </p>
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Cross-post to TikTok -->
+                        <div id="cross-post-tiktok-section" class="mb-6">
+                            <label class="flex items-center p-4 border-2 border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition-all">
+                                <input
+                                    type="checkbox"
+                                    id="cross-post-tiktok"
+                                    name="crossPostToTikTok"
+                                    class="w-5 h-5 text-black border-gray-300 rounded focus:ring-black"
+                                >
+                                <div class="ml-3 flex-1">
+                                    <div class="flex items-center">
+                                        <i class="fab fa-tiktok text-black mr-2"></i>
+                                        <span class="text-sm font-semibold text-gray-800">Cross-post to TikTok</span>
+                                    </div>
+                                    <p class="text-xs text-gray-600 mt-1">Automatically upload to TikTok after YouTube upload (requires TikTok account)</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Number of Videos -->
+                        <div class="mb-6">
+                            <label for="count" class="block text-sm font-semibold text-gray-800 mb-2 flex items-center">
+                                <i class="fas fa-copy mr-2 text-blue-500"></i>
                             Number of Videos
                         </label>
                         <select
                             id="count"
                             name="count"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                         >
                             <option value="1">1 Video</option>
                             <option value="2">2 Videos</option>
@@ -218,27 +984,86 @@
                         </select>
                     </div>
 
-                    <div>
-                        <label for="publish-date" class="block text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-calendar mr-1 text-green-500"></i>
-                            Publish Date/Time (Optional)
-                        </label>
-                        <input
-                            type="datetime-local"
-                            id="publish-date"
-                            name="publishDate"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                        >
+                        <!-- Publish Date/Time - Modern Design -->
+                        <div class="mb-6">
+                            <label for="publish-date" class="block text-sm font-semibold text-gray-800 mb-3 flex items-center">
+                                <i class="fas fa-clock mr-2 text-purple-500"></i>
+                                Schedule Publishing (Optional)
+                            </label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <i class="fas fa-calendar-alt text-gray-400"></i>
+                                </div>
+                                <input
+                                    type="datetime-local"
+                                    id="publish-date"
+                                    name="publishDate"
+                                    min=""
+                                    class="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300 bg-gradient-to-r from-gray-50 to-white hover:border-purple-300"
+                                >
+                            </div>
+                            <div class="mt-2 flex items-center justify-between">
+                                <p class="text-xs text-gray-500 flex items-center">
+                                    <i class="fas fa-info-circle mr-1 text-blue-400"></i>
+                                    Leave empty to publish immediately
+                                </p>
+                                <button type="button" onclick="document.getElementById('publish-date').value=''" class="text-xs text-red-500 hover:text-red-700 transition-colors flex items-center">
+                                    <i class="fas fa-times mr-1"></i>
+                                    Clear
+                                </button>
+                            </div>
+                            <!-- Quick Schedule Buttons -->
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <button type="button" onclick="setScheduleTime(1)" class="px-3 py-1.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full hover:bg-purple-200 transition-all duration-200 flex items-center">
+                                    <i class="fas fa-clock mr-1"></i>+1 Hour
+                                </button>
+                                <button type="button" onclick="setScheduleTime(24)" class="px-3 py-1.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full hover:bg-blue-200 transition-all duration-200 flex items-center">
+                                    <i class="fas fa-sun mr-1"></i>Tomorrow
+                                </button>
+                                <button type="button" onclick="setScheduleTime(168)" class="px-3 py-1.5 text-xs font-medium bg-green-100 text-green-700 rounded-full hover:bg-green-200 transition-all duration-200 flex items-center">
+                                    <i class="fas fa-calendar-week mr-1"></i>Next Week
+                                </button>
+                                <button type="button" onclick="setScheduleTime(0, 9)" class="px-3 py-1.5 text-xs font-medium bg-orange-100 text-orange-700 rounded-full hover:bg-orange-200 transition-all duration-200 flex items-center">
+                                    <i class="fas fa-coffee mr-1"></i>9 AM
+                                </button>
+                                <button type="button" onclick="setScheduleTime(0, 16)" class="px-3 py-1.5 text-xs font-medium bg-pink-100 text-pink-700 rounded-full hover:bg-pink-200 transition-all duration-200 flex items-center">
+                                    <i class="fas fa-moon mr-1"></i>4 PM
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
+                    <!-- Navigation Buttons -->
+                    <div class="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
+                        <div class="flex-1">
+                            <button
+                                type="button"
+                                id="prev-step-btn"
+                                class="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-all duration-200 hidden"
+                            >
+                                <i class="fas fa-arrow-left mr-2"></i>
+                                Previous
+                            </button>
+                        </div>
+                        <div class="flex-1 flex justify-end">
+                            <button
+                                type="button"
+                                id="next-step-btn"
+                                class="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+                            >
+                                Next
+                                <i class="fas fa-arrow-right ml-2"></i>
+                            </button>
                     <button
                         type="submit"
                         id="generate-btn"
-                        class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold py-3 px-6 rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 hidden ml-3"
                     >
                         <i class="fas fa-rocket mr-2"></i>
                         Generate & Upload Shorts
                     </button>
+                        </div>
+                    </div>
                 </form>
             </div>
 
@@ -409,37 +1234,92 @@
 
             <!-- Progress Panel -->
             <div class="bg-white rounded-lg shadow-md p-6 card-hover">
-                <h3 class="text-xl font-bold mb-4 text-gray-800">
+                <h3 class="text-xl font-bold mb-4 text-gray-800 flex items-center">
                     <i class="fas fa-tasks mr-2 text-green-600"></i>
-                    Progress
+                    <span>Progress & Status</span>
                 </h3>
                 
                 <div id="progress-container" class="hidden">
-                    <div class="mb-4">
-                        <div class="flex justify-between text-sm text-gray-600 mb-1">
-                            <span>Progress</span>
-                            <span id="progress-percent">0%</span>
+                    <!-- Modern Circular Progress -->
+                    <div class="text-center mb-6">
+                        <div class="progress-circle" id="circular-progress">
+                            <div class="progress-text" id="circular-progress-text">0%</div>
                         </div>
-                        <div class="w-full bg-gray-200 rounded-full h-3">
-                            <div id="progress-bar" class="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full progress-bar" style="width: 0%"></div>
+                        <p class="text-sm font-semibold text-gray-700 mt-2" id="progress-status">Initializing...</p>
+                        <p class="text-xs text-gray-500 mt-1" id="progress-time">Estimated time: Calculating...</p>
+                    </div>
+
+                    <!-- Step-by-Step Progress Cards -->
+                    <div class="space-y-2 mb-4">
+                        <div class="step-card" id="step-card-1">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-3">
+                                    <i class="fas fa-file-alt text-gray-500"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-700">Generating Script</p>
+                                    <p class="text-xs text-gray-500">Creating engaging content...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="step-card" id="step-card-2">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-3">
+                                    <i class="fas fa-microphone text-gray-500"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-700">Creating Audio</p>
+                                    <p class="text-xs text-gray-500">Generating TTS narration...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="step-card" id="step-card-3">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-3">
+                                    <i class="fas fa-video text-gray-500"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-700">Processing Video</p>
+                                    <p class="text-xs text-gray-500">Assembling final video...</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="step-card" id="step-card-4">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-3">
+                                    <i class="fas fa-upload text-gray-500"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-700">Uploading</p>
+                                    <p class="text-xs text-gray-500">Publishing to YouTube...</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
-                    <div id="current-step" class="text-sm text-gray-600 mb-4 flex items-center">
-                        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                        <span>Initializing...</span>
+                    <!-- Linear Progress Bar (Backup) -->
+                    <div class="mt-4">
+                        <div class="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Overall Progress</span>
+                            <span id="progress-percent">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="progress-bar" class="bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 h-2 rounded-full progress-bar transition-all duration-500" style="width: 0%"></div>
+                        </div>
                     </div>
                 </div>
 
-                <div id="idle-state" class="text-center py-8">
-                    <i class="fas fa-play-circle text-6xl text-gray-300 mb-4"></i>
-                    <p class="text-gray-500">Ready to create amazing YouTube Shorts!</p>
-                    <p class="text-sm text-gray-400 mt-2">Fill out the form and click generate to start</p>
+                <div id="idle-state" class="text-center py-12">
+                    <div class="mb-4">
+                        <i class="fas fa-play-circle text-6xl text-gray-300"></i>
+                    </div>
+                    <p class="text-gray-600 font-medium mb-2">Ready to Create Amazing Videos!</p>
+                    <p class="text-sm text-gray-400">Fill out the form and click generate to start</p>
                 </div>
 
                 <!-- Results -->
                 <div id="results-container" class="hidden">
-                    <h4 class="font-semibold text-gray-800 mb-3">
+                    <h4 class="font-semibold text-gray-800 mb-3 flex items-center">
                         <i class="fas fa-check-circle text-green-500 mr-2"></i>
                         Generated Videos
                     </h4>
@@ -506,6 +1386,36 @@
         <div class="flex justify-end gap-2 mt-4">
           <button id="ud-cancel" class="px-4 py-2 rounded border">Cancel</button>
           <button id="ud-confirm" class="px-4 py-2 rounded bg-red-600 text-white">Upload</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Re-upload Dialog -->
+    <div id="reupload-dialog" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
+        <h3 class="text-lg font-semibold mb-4 flex items-center">
+          <i class="fas fa-share-alt text-blue-600 mr-2"></i>
+          Upload to Other Channels
+        </h3>
+        <p class="text-sm text-gray-600 mb-4">Select the channels where you want to upload this video:</p>
+        <div id="reupload-accounts-list" class="space-y-2 mb-4 overflow-y-auto flex-1">
+          <!-- Account checkboxes will be inserted here -->
+        </div>
+        <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-200 flex-shrink-0">
+          <button id="reupload-cancel" class="px-4 py-2 rounded border-2 border-gray-300 hover:bg-gray-50 text-gray-700 font-medium">Cancel</button>
+          <button id="reupload-confirm" class="px-6 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 flex items-center font-semibold shadow-md transition-all duration-200" style="background-color: #2563eb !important; color: #ffffff !important;">
+            <i class="fas fa-upload mr-2"></i>
+            Upload to Selected Channels
+          </button>
+        </div>
+        <div id="reupload-progress" class="hidden mt-4">
+          <div class="bg-blue-50 border border-blue-200 rounded p-3">
+            <div class="flex items-center mb-2">
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+              <span class="text-sm text-blue-800">Uploading...</span>
+            </div>
+            <div id="reupload-status" class="text-xs text-gray-600"></div>
+          </div>
         </div>
       </div>
     </div>

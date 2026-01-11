@@ -47,25 +47,64 @@ class IntelligentMusicService {
       duration = 30,
       mood = 'auto',
       genre = 'auto',
-      energy = 'auto'
+      energy = 'auto',
+      videoStyle = null
     } = options;
 
-    const extractedMood = mood === 'auto' ? this.extractMoodFromContent(contentAnalysis) : mood;
+    // ENHANCED: Better mood extraction with style hints
+    let extractedMood = mood === 'auto' ? this.extractMoodFromContent(contentAnalysis) : mood;
+    
+    // If style is provided, use it to refine mood
+    if (videoStyle && (mood === 'auto' || !mood)) {
+      const styleMoodMap = {
+        'entertaining': 'fun',
+        'educational': 'professional',
+        'motivational': 'energetic',
+        'storytelling': 'dramatic',
+        'controversial': 'dramatic',
+        'quick-tips': 'energetic'
+      };
+      const styleMood = styleMoodMap[videoStyle];
+      if (styleMood) {
+        extractedMood = styleMood;
+        console.log(`🎵 [Music] Style "${videoStyle}" → mood "${extractedMood}"`);
+      }
+    }
+    
     const extractedEnergy = energy === 'auto' ? this.extractEnergyFromContent(contentAnalysis) : energy;
     const extractedGenre = genre === 'auto' ? this.extractGenreFromContent(contentAnalysis) : genre;
+    
+    // ENHANCED: Refine energy based on mood
+    let finalEnergy = extractedEnergy;
+    if (extractedEnergy === 'auto' || !extractedEnergy) {
+      const moodEnergyMap = {
+        'energetic': 'high',
+        'fun': 'high',
+        'calm': 'low',
+        'dramatic': 'medium',
+        'professional': 'low',
+        'romantic': 'low',
+        'sad': 'low',
+        'happy': 'high'
+      };
+      finalEnergy = moodEnergyMap[extractedMood] || 'medium';
+    } else {
+      finalEnergy = extractedEnergy;
+    }
 
-    // Try real music
+    // Try real music with refined parameters
     const real = await this.findRealMusic(contentAnalysis, {
       mood: extractedMood,
-      energy: extractedEnergy,
+      energy: finalEnergy,
       genre: extractedGenre,
       duration
     });
 
     if (real && real.length) {
+      console.log(`✅ [Music] Found ${real.length} real music tracks matching mood: ${extractedMood}, energy: ${finalEnergy}`);
       return {
         mood: extractedMood,
-        energy: extractedEnergy,
+        energy: finalEnergy,
         genre: extractedGenre,
         recommendations: real,
         selected: real[0]
@@ -73,11 +112,12 @@ class IntelligentMusicService {
     }
 
     // fallback: request AI-generated music or generate synthetic
-    const aiMusic = await this.generateAIMusic({ mood: extractedMood, energy: extractedEnergy, genre: extractedGenre }, duration);
+    const aiMusic = await this.generateAIMusic({ mood: extractedMood, energy: finalEnergy, genre: extractedGenre }, duration);
     if (aiMusic) {
+      console.log(`✅ [Music] Generated AI music for mood: ${extractedMood}, energy: ${finalEnergy}`);
       return {
         mood: extractedMood,
-        energy: extractedEnergy,
+        energy: finalEnergy,
         genre: extractedGenre,
         recommendations: [aiMusic],
         selected: aiMusic
@@ -85,18 +125,19 @@ class IntelligentMusicService {
     }
 
     // final fallback: simple synthetic placeholder
+    console.log(`⚠️ [Music] Using synthetic music for mood: ${extractedMood}, energy: ${finalEnergy}`);
     const synthetic = {
       id: `synthetic_${extractedMood}_${Date.now()}`,
       title: `${extractedMood} background`,
       mood: extractedMood,
-      energy: extractedEnergy,
+      energy: finalEnergy,
       genre: extractedGenre,
-      path: await this.generateEnhancedSyntheticMusic({ mood: extractedMood, energy: extractedEnergy, genre: extractedGenre }, duration),
+      path: await this.generateEnhancedSyntheticMusic({ mood: extractedMood, energy: finalEnergy, genre: extractedGenre }, duration),
       duration
     };
     return {
       mood: extractedMood,
-      energy: extractedEnergy,
+      energy: finalEnergy,
       genre: extractedGenre,
       recommendations: [synthetic],
       selected: synthetic

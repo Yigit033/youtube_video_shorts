@@ -13,7 +13,7 @@ router.get('/youtube', (req, res) => {
   }
 });
 
-// OAuth callback URL
+// OAuth callback URL (for redirect-based OAuth)
 router.get('/youtube/callback', async (req, res) => {
   try {
     const { code } = req.query;
@@ -22,11 +22,13 @@ router.get('/youtube/callback', async (req, res) => {
     }
 
     // Handle the OAuth callback with the authorization code
-    await youtubeService.handleCallback(code);
-    res.redirect('/?auth=success');
+    const result = await youtubeService.handleCallback(code, true);
+    
+    // Redirect with success message
+    res.redirect(`/?auth=success&accountId=${result.accountId}&channel=${encodeURIComponent(result.channelInfo?.title || '')}`);
   } catch (error) {
     console.error('Callback error:', error);
-    res.status(500).send('Authentication failed: ' + error.message);
+    res.redirect(`/?auth=error&message=${encodeURIComponent(error.message)}`);
   }
 });
 

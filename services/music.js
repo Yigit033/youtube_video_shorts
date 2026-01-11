@@ -27,7 +27,9 @@ class MusicService {
   // outputPath: target final file (wav or mp3)
   async mixAudioWithMusic(audioPath, musicPath, outputPath, opts = {}) {
     const finalFile = outputPath || path.join(this.outputDir, `mixed_${Date.now()}.wav`);
-    const musicVol = (typeof opts.musicVolume !== 'undefined') ? opts.musicVolume : 0.35;
+    // CRITICAL: Music volume set to 0.75 (previously 0.65) - background music is slightly louder
+    // TTS voice should remain primary (1.25 gain), music supports narration but is more present
+    const musicVol = (typeof opts.musicVolume !== 'undefined') ? opts.musicVolume : 0.85;
     const narrationGain = (typeof opts.narrationGain !== 'undefined') ? opts.narrationGain : 1.25;
     const duckThreshold = opts.duckThreshold || -30;
     const duckRatio = opts.duckRatio || 10;

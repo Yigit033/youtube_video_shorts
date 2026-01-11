@@ -19,27 +19,6 @@ class VideoService {
     }
   }
 
-  /**
-   * Detect if text is in Turkish based on Turkish-specific characters
-   * @param {string} text - Text to analyze
-   * @returns {boolean} True if Turkish is detected
-   */
-  detectTurkishLanguage(text) {
-    if (!text || typeof text !== 'string') return false;
-    
-    // Turkish-specific characters: ç, ğ, ı, İ, ö, ş, ü, Ç, Ğ, Ö, Ş, Ü
-    const turkishChars = /[çğıİöşüÇĞÖŞÜ]/;
-    
-    // Common Turkish words (additional check)
-    const turkishWords = /\b(ve|bir|bu|için|ile|olan|gibi|daha|ama|ancak|çünkü|sonra|önce|kadar|olarak|üzerinde|arasında|tarafından)\b/i;
-    
-    const hasTurkishChars = turkishChars.test(text);
-    const hasTurkishWords = turkishWords.test(text);
-    
-    // Return true if Turkish characters found OR multiple Turkish words
-    return hasTurkishChars || hasTurkishWords;
-  }
-
   async assembleVideo({ audioPath, videoClips, script, videoIndex, videoFormat = 'shorts', subtitlesEnabled = true, targetDuration = null }) {
     let montageVideoPath;
     try {
@@ -127,18 +106,11 @@ class VideoService {
         const narrationDuration = scriptWithImageCount && scriptWithImageCount.actualNarrationDuration 
           ? scriptWithImageCount.actualNarrationDuration 
           : null;
-        
-        // Detect if script is Turkish based on Turkish-specific characters
-        const scriptText = typeof script === 'string' ? script : (script?.text || '');
-        const isTurkish = this.detectTurkishLanguage(scriptText);
-        console.log(`🌍 [Language] Detected: ${isTurkish ? 'Turkish 🇹🇷' : 'English 🇬🇧'}`);
-        
         finalVideoPath = await this.addOutroVideo(
           videoWithAudioPath,
           outputPath,
           videoFormat,
-          narrationDuration, // Pass narration duration for post-script music pause
-          isTurkish // NEW: Pass language flag for Turkish outro
+          narrationDuration // NEW: Pass narration duration for post-script music pause
         );
       } else {
         // Shorts: No outro, just copy video to output
@@ -1429,22 +1401,16 @@ class VideoService {
    * @param {string} mainVideoPath - Path to main video
    * @param {string} outputPath - Path to save final video
    * @param {string} videoFormat - 'youtube' or 'shorts'
-   * @param {boolean} isTurkish - Whether the video is in Turkish (for Turkish outro)
    * @returns {Promise<string>} Path to final video
    */
-  async addOutroVideo(mainVideoPath, outputPath, videoFormat = 'shorts', narrationDuration = null, isTurkish = false) {
+  async addOutroVideo(mainVideoPath, outputPath, videoFormat = 'shorts', narrationDuration = null) {
     return new Promise(async (resolve, reject) => {
       try {
         const outroDir = path.join(__dirname, '..', 'temp', 'video_outro');
-        // Select outro video based on format and language
-        // YouTube: Turkish → "Youtube Türkiye Kapanış.mp4", English → "Youtube Kapanış.mp4"
-        // Shorts: "Youtube Kapanış Shorts.mp4" (no Turkish version for shorts)
-        let outroFileName;
-        if (videoFormat === 'youtube') {
-          outroFileName = isTurkish ? 'Youtube Türkiye Kapanış.mp4' : 'Youtube Kapanış.mp4';
-        } else {
-          outroFileName = 'Youtube Kapanış Shorts.mp4';
-        }
+        // Select outro video based on format: YouTube uses "Youtube Kapanış.mp4", Shorts uses "Youtube Kapanış Shorts.mp4"
+        const outroFileName = videoFormat === 'youtube' 
+          ? 'Youtube Kapanış.mp4' 
+          : 'Youtube Kapanış Shorts.mp4';
         const outroPath = path.join(outroDir, outroFileName);
 
         // Check if outro exists

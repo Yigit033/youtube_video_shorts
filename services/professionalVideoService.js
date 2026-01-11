@@ -559,7 +559,7 @@ class ProfessionalVideoService {
       command
         .complexFilter([
           '[0:a?]volume=0.8[voice]', // Optional audio from video (reduced)
-          '[1:a]volume=0.6[music]',  // Background music (increased from 0.2 to 0.6)
+          '[1:a]volume=0.65[music]',  // Background music (increased from 0.55 to 0.65 - more prominent)
           '[voice][music]amix=inputs=2:duration=first[audio]' // Mix both
         ])
         .outputOptions([
@@ -596,7 +596,7 @@ class ProfessionalVideoService {
         .input(videoPath)
         .input(musicPath)
         .complexFilter([
-          '[1:a]volume=0.7[music]'  // Increase music volume to 0.7
+          '[1:a]volume=0.65[music]'  // Background music (increased from 0.55 to 0.65 - more prominent) 
         ])
         .outputOptions([
           '-map', '0:v',

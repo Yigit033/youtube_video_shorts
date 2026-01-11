@@ -9,6 +9,12 @@ class YouTubeService {
     this.clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
     this.redirectUri = process.env.YOUTUBE_REDIRECT_URI || 'http://localhost:3000/auth/youtube/callback';
     
+    // Multi-account support
+    this.accounts = new Map(); // accountId -> { tokens, oauth2Client, youtube, channelInfo }
+    this.currentAccountId = null; // Selected account ID
+    this.accountsDataPath = path.join(__dirname, '..', 'temp', 'youtube_accounts.json');
+    
+    // Legacy support (backward compatibility)
     this.oauth2Client = null;
     this.youtube = null;
     this.tokensPath = path.join(__dirname, '..', 'temp', 'youtube_tokens.json');
@@ -25,6 +31,10 @@ class YouTubeService {
     }
 
     try {
+      // Load saved accounts (multi-account support)
+      this.loadSavedAccounts();
+      
+      // Legacy support: Create default OAuth client for backward compatibility
       this.oauth2Client = new google.auth.OAuth2(
         this.clientId,
         this.clientSecret,
@@ -34,15 +44,15 @@ class YouTubeService {
       // Set up auto-refresh of tokens
       this.oauth2Client.on('tokens', (tokens) => {
         if (tokens.refresh_token) {
-          // Store the refresh token
+          // Store the refresh token (legacy)
           this.saveTokens(tokens);
         }
       });
 
-      // Load saved tokens if they exist
+      // Load saved tokens if they exist (legacy)
       this.loadSavedTokens();
 
-      // Initialize YouTube API client
+      // Initialize YouTube API client (legacy)
       this.youtube = google.youtube({ version: 'v3', auth: this.oauth2Client });
       
       // Initialize Analytics if tokens exist
@@ -51,46 +61,278 @@ class YouTubeService {
       }
       
       console.log('✅ YouTube service initialized');
+      console.log(`📊 Loaded ${this.accounts.size} YouTube account(s)`);
     } catch (error) {
       console.error('❌ Failed to initialize YouTube service:', error.message);
       throw error;
     }
   }
 
-  getAuthUrl() {
-    if (!this.oauth2Client) {
-      throw new Error('YouTube OAuth not configured');
+  // NEW: Load saved accounts from file
+  loadSavedAccounts() {
+    try {
+      if (fs.existsSync(this.accountsDataPath)) {
+        const accountsData = JSON.parse(fs.readFileSync(this.accountsDataPath, 'utf8'));
+        
+        // Track seen accounts to prevent duplicates
+        const seenChannelIds = new Set();
+        const seenEmails = new Set();
+        let duplicateCount = 0;
+        
+        // Restore accounts
+        for (const [accountId, accountData] of Object.entries(accountsData.accounts || {})) {
+          const channelId = accountData.channelInfo?.id || accountId;
+          const email = accountData.email?.toLowerCase() || '';
+          
+          // Skip duplicates
+          if (seenChannelIds.has(channelId)) {
+            console.warn(`⚠️  Skipping duplicate account (same channel ID): ${channelId}`);
+            duplicateCount++;
+            continue;
+          }
+          
+          if (email && seenEmails.has(email)) {
+            console.warn(`⚠️  Skipping duplicate account (same email): ${email}`);
+            duplicateCount++;
+            continue;
+          }
+          
+          seenChannelIds.add(channelId);
+          if (email) seenEmails.add(email);
+          
+          this.restoreAccount(accountId, accountData);
+        }
+        
+        // Clean up duplicates from file if found
+        if (duplicateCount > 0) {
+          console.log(`🧹 Found ${duplicateCount} duplicate(s), cleaning up...`);
+          this.saveAccounts(); // This will save only unique accounts
+        }
+        
+        // Restore current account selection
+        if (accountsData.currentAccountId && this.accounts.has(accountsData.currentAccountId)) {
+          this.currentAccountId = accountsData.currentAccountId;
+        } else if (this.accounts.size > 0) {
+          // If saved account doesn't exist, use first available
+          this.currentAccountId = Array.from(this.accounts.keys())[0];
+        }
+        
+        console.log(`✅ Loaded ${this.accounts.size} saved account(s)`);
+      }
+    } catch (error) {
+      console.error('❌ Error loading saved accounts:', error.message);
     }
+  }
+  
+  // NEW: Restore account from saved data
+  restoreAccount(accountId, accountData) {
+    try {
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret,
+        this.redirectUri
+      );
+      
+      oauth2Client.setCredentials(accountData.tokens);
+      
+      // Set up auto-refresh
+      oauth2Client.on('tokens', (tokens) => {
+        if (tokens.refresh_token) {
+          accountData.tokens = { ...accountData.tokens, ...tokens };
+          this.saveAccount(accountId, accountData);
+        }
+      });
+      
+      const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+      
+      this.accounts.set(accountId, {
+        tokens: accountData.tokens,
+        oauth2Client,
+        youtube,
+        channelInfo: accountData.channelInfo || null,
+        email: accountData.email || null,
+        addedAt: accountData.addedAt || Date.now()
+      });
+      
+      console.log(`✅ Restored account: ${accountData.channelInfo?.title || accountId}`);
+    } catch (error) {
+      console.error(`❌ Error restoring account ${accountId}:`, error.message);
+    }
+  }
+  
+  // NEW: Save accounts to file
+  saveAccounts() {
+    try {
+      const tempDir = path.dirname(this.accountsDataPath);
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      const accountsData = {
+        currentAccountId: this.currentAccountId,
+        accounts: {}
+      };
+      
+      for (const [accountId, account] of this.accounts.entries()) {
+        accountsData.accounts[accountId] = {
+          tokens: account.tokens,
+          channelInfo: account.channelInfo,
+          email: account.email,
+          addedAt: account.addedAt
+        };
+      }
+      
+      fs.writeFileSync(this.accountsDataPath, JSON.stringify(accountsData, null, 2));
+      console.log('💾 YouTube accounts saved');
+    } catch (error) {
+      console.error('❌ Failed to save accounts:', error);
+    }
+  }
+  
+  // NEW: Save single account
+  saveAccount(accountId, accountData) {
+    const account = this.accounts.get(accountId);
+    if (account) {
+      account.tokens = accountData.tokens || account.tokens;
+      account.channelInfo = accountData.channelInfo || account.channelInfo;
+      account.email = accountData.email || account.email;
+      account.addedAt = accountData.addedAt || account.addedAt;
+    }
+    this.saveAccounts();
+    }
+
+  getAuthUrl(state = null, redirectUri = null) {
+    // Create temporary OAuth client for new account
+    const tempOAuth2Client = new google.auth.OAuth2(
+      this.clientId,
+      this.clientSecret,
+      redirectUri || this.redirectUri
+    );
 
     const scopes = [
       'https://www.googleapis.com/auth/youtube.upload',
-      'https://www.googleapis.com/auth/youtube'
+      'https://www.googleapis.com/auth/youtube',
+      'https://www.googleapis.com/auth/userinfo.email' // Get email for account identification
     ];
 
-    return this.oauth2Client.generateAuthUrl({
+    const authUrl = tempOAuth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: scopes,
-      prompt: 'consent'
+      prompt: 'consent',
+      state: state || 'new-account' // State to identify this is a new account
     });
+    
+    return authUrl;
   }
 
-  async handleCallback(code) {
-    if (!this.oauth2Client) {
-      throw new Error('YouTube OAuth not configured');
-    }
-
+  async handleCallback(code, isNewAccount = true) {
     try {
-      const { tokens } = await this.oauth2Client.getToken(code);
-      this.oauth2Client.setCredentials(tokens);
+      // Create temporary OAuth client to get tokens
+      const tempOAuth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret,
+        this.redirectUri
+      );
       
-      // Save tokens for future use
+      const { tokens } = await tempOAuth2Client.getToken(code);
+      tempOAuth2Client.setCredentials(tokens);
+      
+      // Get user info (email) for account identification
+      const oauth2 = google.oauth2({ version: 'v2', auth: tempOAuth2Client });
+      const userInfo = await oauth2.userinfo.get();
+      const email = userInfo.data.email;
+      
+      // Get channel info
+      const youtube = google.youtube({ version: 'v3', auth: tempOAuth2Client });
+      const channelsResponse = await youtube.channels.list({
+        part: ['snippet', 'id'],
+        mine: true
+      });
+      
+      if (!channelsResponse.data.items || channelsResponse.data.items.length === 0) {
+        throw new Error('No YouTube channel found for this account');
+      }
+      
+      const channel = channelsResponse.data.items[0];
+      const channelId = channel.id;
+      const channelInfo = {
+        id: channelId,
+        title: channel.snippet.title,
+        description: channel.snippet.description,
+        thumbnail: channel.snippet.thumbnails?.default?.url || null
+      };
+      
+      // Create account ID (use channel ID as unique identifier)
+      const accountId = channelId;
+      
+      // Check if account already exists
+      if (this.accounts.has(accountId)) {
+        console.log(`⚠️  Account already exists: ${channelInfo.title}`);
+        // Update tokens
+        const existingAccount = this.accounts.get(accountId);
+        existingAccount.tokens = tokens;
+        existingAccount.oauth2Client.setCredentials(tokens);
+        this.saveAccount(accountId, {
+          tokens,
+          channelInfo,
+          email,
+          addedAt: existingAccount.addedAt
+        });
+        return { accountId, channelInfo, email, isNew: false };
+      }
+      
+      // Create OAuth client for this account
+      const oauth2Client = new google.auth.OAuth2(
+        this.clientId,
+        this.clientSecret,
+        this.redirectUri
+      );
+      
+      oauth2Client.setCredentials(tokens);
+      
+      // Set up auto-refresh
+      oauth2Client.on('tokens', (newTokens) => {
+        if (newTokens.refresh_token) {
+          const account = this.accounts.get(accountId);
+          if (account) {
+            account.tokens = { ...account.tokens, ...newTokens };
+            this.saveAccount(accountId, account);
+          }
+        }
+      });
+      
+      const accountYoutube = google.youtube({ version: 'v3', auth: oauth2Client });
+      
+      // Save account
+      this.accounts.set(accountId, {
+        tokens,
+        oauth2Client,
+        youtube: accountYoutube,
+        channelInfo,
+        email,
+        addedAt: Date.now()
+      });
+      
+      // Set as current account if no account is selected
+      if (!this.currentAccountId) {
+        this.currentAccountId = accountId;
+      }
+      
+      // Save accounts
+      this.saveAccounts();
+      
+      // Legacy support: Also save to old tokens file for backward compatibility
+      if (isNewAccount && this.accounts.size === 1) {
       this.saveTokens(tokens);
+        this.oauth2Client = oauth2Client;
+        this.youtube = accountYoutube;
+      }
       
-      console.log('✅ YouTube authentication successful');
-      return tokens;
+      console.log(`✅ YouTube authentication successful: ${channelInfo.title} (${email})`);
+      return { accountId, channelInfo, email, isNew: true };
     } catch (error) {
       console.error('YouTube auth error:', error);
-      throw new Error('Failed to authenticate with YouTube');
+      throw new Error('Failed to authenticate with YouTube: ' + error.message);
     }
   }
 
@@ -129,11 +371,178 @@ class YouTubeService {
     }
   }
 
-  isAuthenticated() {
-    if (!this.oauth2Client) return false;
+  isAuthenticated(accountId = null) {
+    // If accountId specified, check that account
+    if (accountId) {
+      const account = this.accounts.get(accountId);
+      if (!account) return false;
+      const credentials = account.oauth2Client.credentials;
+      return !!(credentials.access_token || credentials.refresh_token);
+    }
     
+    // Check current account
+    if (this.currentAccountId) {
+      const account = this.accounts.get(this.currentAccountId);
+      if (account) {
+        const credentials = account.oauth2Client.credentials;
+        return !!(credentials.access_token || credentials.refresh_token);
+      }
+    }
+    
+    // Legacy support
+    if (!this.oauth2Client) return false;
     const credentials = this.oauth2Client.credentials;
     return !!(credentials.access_token || credentials.refresh_token);
+  }
+  
+  // NEW: Get list of all accounts
+  getAccounts() {
+    const accountsList = [];
+    const seenEmails = new Set();
+    const seenChannelIds = new Set();
+    
+    for (const [accountId, account] of this.accounts.entries()) {
+      // Skip duplicates: same email or same channel ID
+      const email = account.email?.toLowerCase() || '';
+      const channelId = account.channelInfo?.id || accountId;
+      
+      if (email && seenEmails.has(email)) {
+        console.warn(`⚠️  Skipping duplicate account (same email): ${email}`);
+        continue;
+      }
+      
+      if (seenChannelIds.has(channelId)) {
+        console.warn(`⚠️  Skipping duplicate account (same channel ID): ${channelId}`);
+        continue;
+      }
+      
+      seenEmails.add(email);
+      seenChannelIds.add(channelId);
+      
+      accountsList.push({
+        accountId,
+        channelInfo: account.channelInfo,
+        email: account.email,
+        addedAt: account.addedAt,
+        isCurrent: accountId === this.currentAccountId
+      });
+    }
+    
+    console.log(`📋 getAccounts() returning ${accountsList.length} unique account(s)`);
+    return accountsList;
+  }
+  
+  // NEW: Get current account
+  getAccount(accountId) {
+    if (!accountId) {
+      return null;
+    }
+    return this.accounts.get(accountId) || null;
+  }
+
+  getCurrentAccount() {
+    if (!this.currentAccountId) return null;
+    const account = this.accounts.get(this.currentAccountId);
+    if (!account) return null;
+    
+    return {
+      accountId: this.currentAccountId,
+      channelInfo: account.channelInfo,
+      email: account.email,
+      addedAt: account.addedAt
+    };
+  }
+  
+  // NEW: Select account
+  selectAccount(accountId) {
+    if (!this.accounts.has(accountId)) {
+      throw new Error(`Account ${accountId} not found`);
+    }
+    
+    this.currentAccountId = accountId;
+    this.saveAccounts();
+    console.log(`✅ Selected account: ${this.accounts.get(accountId).channelInfo?.title || accountId}`);
+    return true;
+  }
+  
+  // NEW: Remove account
+  removeAccount(accountId) {
+    if (!this.accounts.has(accountId)) {
+      throw new Error(`Account ${accountId} not found`);
+    }
+    
+    // Don't allow removing if it's the only account
+    if (this.accounts.size === 1) {
+      throw new Error('Cannot remove the only account');
+    }
+    
+    this.accounts.delete(accountId);
+    
+    // If removed account was current, select another one
+    if (this.currentAccountId === accountId) {
+      const remainingAccounts = Array.from(this.accounts.keys());
+      this.currentAccountId = remainingAccounts[0] || null;
+    }
+    
+    this.saveAccounts();
+    console.log(`🗑️  Removed account: ${accountId}`);
+    return true;
+  }
+  
+  // NEW: Get account's YouTube client (for upload)
+  async getAccountYouTube(accountId = null) {
+    const targetAccountId = accountId || this.currentAccountId;
+    
+    if (!targetAccountId) {
+      // Legacy fallback
+      if (this.youtube) return this.youtube;
+      throw new Error('No account selected and no legacy client available');
+    }
+    
+    const account = this.accounts.get(targetAccountId);
+    if (!account) {
+      throw new Error(`Account ${targetAccountId} not found`);
+    }
+    
+    // Refresh token if needed
+    if (account.oauth2Client.credentials.expiry_date && account.oauth2Client.credentials.expiry_date < Date.now()) {
+      try {
+        await account.oauth2Client.refreshAccessToken();
+        console.log(`✅ Token refreshed successfully for account ${targetAccountId}`);
+      } catch (err) {
+        const errorMessage = err.message || '';
+        const isInvalidGrant = errorMessage.includes('invalid_grant') || 
+                              (err.response && err.response.data && err.response.data.error === 'invalid_grant');
+        
+        if (isInvalidGrant) {
+          console.error(`❌ [YouTube Auth] Token expired or revoked for account ${targetAccountId}`);
+          console.error(`❌ [YouTube Auth] Error: ${err.response?.data?.error_description || 'Token has been expired or revoked'}`);
+          throw new Error(`YouTube authentication expired. Please reconnect your YouTube account. Go to the dashboard and click "Connect YouTube Account" to re-authenticate.`);
+        } else {
+          console.error(`⚠️  Failed to refresh token for account ${targetAccountId}:`, err.message);
+          throw new Error(`Failed to refresh YouTube token: ${err.message}`);
+        }
+      }
+    }
+    
+    return account.youtube;
+  }
+  
+  // NEW: Get account's OAuth client
+  getAccountOAuth(accountId = null) {
+    const targetAccountId = accountId || this.currentAccountId;
+    
+    if (!targetAccountId) {
+      // Legacy fallback
+      return this.oauth2Client;
+    }
+    
+    const account = this.accounts.get(targetAccountId);
+    if (!account) {
+      throw new Error(`Account ${targetAccountId} not found`);
+    }
+    
+    return account.oauth2Client;
   }
 
   /**
@@ -147,13 +556,14 @@ class YouTubeService {
    * @param {string} [params.topic] - Video topic for SEO optimization
    * @param {boolean} [params.enableABTest] - Whether to generate A/B test variations
    * @param {string[]} [params.translateTo] - Array of language codes to translate to
+   * @param {string} [params.thumbnailPath] - Path to custom thumbnail image (JPEG/PNG)
    * @returns {Promise<Object>} Upload result with videoId, URL, and variations
    */
   async uploadVideo(params) {
     console.log('🚀 Starting YouTube upload process with SEO optimization...');
     
     // Parameter extraction with better validation
-    let videoPath, title, description, tags = [], publishAt = null, topic = '', enableABTest = false, translateTo = [];
+      let videoPath, title, description, tags = [], publishAt = null, topic = '', enableABTest = false, translateTo = [], thumbnailPath = null, accountId = null;
     
     try {
       // Handle both parameter styles
@@ -173,6 +583,8 @@ class YouTubeService {
         topic = params.topic || '';
         enableABTest = !!params.enableABTest;
         translateTo = Array.isArray(params.translateTo) ? params.translateTo : [];
+        thumbnailPath = params.thumbnailPath || null;
+        accountId = params.accountId || null; // NEW: Account ID for multi-account support
       } else {
         throw new Error('Invalid parameters for uploadVideo');
       }
@@ -239,19 +651,42 @@ class YouTubeService {
         }
       }
       
-      // Initialize YouTube client if needed
-      if (!this.oauth2Client) {
-        throw new Error('YouTube client not initialized. Check your credentials.');
+      // CRITICAL: Get YouTube client for selected account (or use accountId from params)
+      const targetAccountId = accountId || this.currentAccountId;
+      const youtube = await this.getAccountYouTube(targetAccountId);
+      const oauth2Client = this.getAccountOAuth(targetAccountId);
+      
+      // Get current account info for logging
+      const currentAccount = this.getCurrentAccount();
+      if (currentAccount) {
+        console.log(`📺 Uploading to account: ${currentAccount.channelInfo?.title || currentAccount.accountId} (${currentAccount.email})`);
       }
       
       // Ensure we have valid credentials
-      if (!this.oauth2Client.credentials) {
-        await this.loadTokens();
+      if (!oauth2Client.credentials) {
+        throw new Error('YouTube account not authenticated. Please authenticate first.');
       }
       
       // Refresh token if needed
-      if (this.oauth2Client.credentials.expiry_date < Date.now()) {
-        await this.oauth2Client.refreshAccessToken();
+      if (oauth2Client.credentials.expiry_date && oauth2Client.credentials.expiry_date < Date.now()) {
+        try {
+          await oauth2Client.refreshAccessToken();
+          console.log('✅ Token refreshed successfully');
+        } catch (refreshError) {
+          const errorMessage = refreshError.message || '';
+          const errorData = refreshError.response?.data;
+          const isInvalidGrant = errorMessage.includes('invalid_grant') || 
+                                (errorData && errorData.error === 'invalid_grant');
+          
+          if (isInvalidGrant) {
+            console.error('❌ [YouTube Auth] Token expired or revoked');
+            console.error(`❌ [YouTube Auth] Error: ${errorData?.error_description || 'Token has been expired or revoked'}`);
+            throw new Error('YouTube authentication expired. Please reconnect your YouTube account. Go to the dashboard and click "Connect YouTube Account" to re-authenticate.');
+          } else {
+            console.error('⚠️  Failed to refresh token:', refreshError.message);
+            throw new Error(`Failed to refresh YouTube token: ${refreshError.message}`);
+          }
+        }
       }
 
       const videoMetadata = {
@@ -259,24 +694,43 @@ class YouTubeService {
           title: title || 'Generated YouTube Short',
           description: description || 'Created with YouTube Shorts Automation',
           tags: Array.isArray(tags) ? tags : (tags ? tags.split(',').map(tag => tag.trim()) : []),
-          categoryId: '22' // People & Blogs
+          categoryId: '1', // Film & Animation (changed from People & Blogs for documentary/history videos)
+          defaultLanguage: 'en-US', // Video language: English (United States)
+          defaultAudioLanguage: 'en-US' // Title and description language: English (United States)
         },
         status: {
-          privacyStatus: publishAt ? 'private' : 'public',
-          selfDeclaredMadeForKids: false,
-          defaultLanguage: 'en',
-          defaultAudioLanguage: 'en',
-          ...(publishAt && { publishAt: new Date(publishAt).toISOString() })
+          privacyStatus: 'public', // Will be updated below if valid publishAt
+          selfDeclaredMadeForKids: false
         }
       };
 
-      // Add publish time if provided
+      // ROBUST DATE VALIDATION: Prevent invalid date errors
       if (publishAt) {
-        videoMetadata.status.publishAt = new Date(publishAt).toISOString();
-        videoMetadata.status.privacyStatus = 'private'; // Required for scheduled videos
+        try {
+          const parsedDate = new Date(publishAt);
+          const now = new Date();
+          const maxDate = new Date('2100-01-01');
+          const minDate = new Date('2020-01-01');
+          
+          // Validate date is reasonable (between 2020 and 2100)
+          if (isNaN(parsedDate.getTime())) {
+            console.warn(`⚠️ [YouTube] Invalid publishAt date format: ${publishAt} - Publishing immediately`);
+          } else if (parsedDate.getFullYear() > 2100 || parsedDate.getFullYear() < 2020) {
+            console.warn(`⚠️ [YouTube] Invalid year in publishAt: ${parsedDate.getFullYear()} - Publishing immediately`);
+          } else if (parsedDate < now) {
+            console.warn(`⚠️ [YouTube] publishAt is in the past: ${publishAt} - Publishing immediately`);
+          } else {
+            // Valid date - apply scheduling
+            videoMetadata.status.publishAt = parsedDate.toISOString();
+            videoMetadata.status.privacyStatus = 'private'; // Required for scheduled videos
+            console.log(`📅 [YouTube] Scheduled for: ${parsedDate.toLocaleString()}`);
+          }
+        } catch (dateError) {
+          console.warn(`⚠️ [YouTube] Date parsing error: ${dateError.message} - Publishing immediately`);
+        }
       }
 
-      const response = await this.youtube.videos.insert({
+      const response = await youtube.videos.insert({
         part: ['snippet', 'status'],
         requestBody: videoMetadata,
         media: {
@@ -287,6 +741,28 @@ class YouTubeService {
       const videoId = response.data.id;
       const videoUrl = `https://youtube.com/watch?v=${videoId}`;
       const videoTitle = response.data.snippet.title;
+      
+      // Upload custom thumbnail if provided
+      if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+        try {
+          console.log(`🖼️  Uploading custom thumbnail: ${path.basename(thumbnailPath)}`);
+          // Determine MIME type from file extension
+          const ext = path.extname(thumbnailPath).toLowerCase();
+          const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+          
+          await youtube.thumbnails.set({
+            videoId: videoId,
+            media: {
+              body: fs.createReadStream(thumbnailPath),
+              mimeType: mimeType
+            }
+          });
+          console.log(`✅ Custom thumbnail uploaded successfully`);
+        } catch (thumbnailError) {
+          console.warn(`⚠️  Failed to upload custom thumbnail: ${thumbnailError.message}`);
+          // Don't fail the entire upload if thumbnail fails
+        }
+      }
       
       console.log('🎉 ===== YOUTUBE UPLOAD SUCCESSFUL! =====');
       console.log(`📺 Video Title: ${videoTitle}`);
@@ -536,14 +1012,17 @@ class YouTubeService {
   }
 
   // Test the AI service connection
-  async testConnection() {
-    if (!this.isAuthenticated()) {
+  async testConnection(accountId = null) {
+    const targetAccountId = accountId || this.currentAccountId;
+    
+    if (!this.isAuthenticated(targetAccountId)) {
       return { success: false, error: 'Not authenticated' };
     }
 
     try {
       // Test by getting channel info
-      const response = await this.youtube.channels.list({
+      const youtube = await this.getAccountYouTube(targetAccountId);
+      const response = await youtube.channels.list({
         part: ['snippet'],
         mine: true
       });

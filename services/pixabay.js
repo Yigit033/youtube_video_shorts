@@ -16,22 +16,24 @@ class PixabayService {
     }
   }
 
-  async fetchVideos(query, count = 3) {
+  async fetchVideos(query, count = 3, videoFormat = 'shorts') {
     if (!this.apiKey) {
       console.log('⚠️  [Pixabay] API key not configured, skipping');
       return [];
     }
 
     try {
-      console.log(`🎬 [Pixabay] Searching for videos: "${query}"`);
+      // Determine orientation based on video format
+      const orientation = videoFormat === 'youtube' ? 'horizontal' : 'vertical';
+      console.log(`🎬 [Pixabay] Searching for videos: "${query}" (orientation: ${orientation})`);
       
       const response = await axios.get(this.baseUrl, {
         params: {
           key: this.apiKey,
           q: query,
           video_type: 'film',
-          orientation: 'vertical',
-          min_width: 720,
+          orientation: orientation, // Dynamic: 'vertical' for shorts, 'horizontal' for youtube
+          min_width: videoFormat === 'youtube' ? 1280 : 720, // Higher min width for landscape
           per_page: Math.min(count + 2, 10),
           order: 'popular',
           min_duration: 5,

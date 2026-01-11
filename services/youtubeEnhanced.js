@@ -224,7 +224,9 @@ class YouTubeEnhanced {
               title: metadata.title + (suffix ? ` ${suffix}` : ''),
               description: metadata.description,
               tags: metadata.tags,
-              categoryId: '22' // People & Blogs
+              categoryId: '1', // Film & Animation (changed from People & Blogs for documentary/history videos)
+              defaultLanguage: 'en-US', // Video language: English (United States)
+              defaultAudioLanguage: 'en-US' // Title and description language: English (United States)
             },
             status: {
               privacyStatus: 'private', // Start as private for review

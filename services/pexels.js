@@ -26,32 +26,44 @@ class PexelsService {
       .join(' ');
   }
 
-  getVideoQualityScore(videoFile) {
+  getVideoQualityScore(videoFile, videoFormat = 'shorts') {
     const qualityWeights = {
-      'hd': { base: 100, portrait: 20, resolution: 10 },
-      'sd': { base: 50, portrait: 20, resolution: 5 }
+      'hd': { base: 100, portrait: 20, landscape: 20, resolution: 10 },
+      'sd': { base: 50, portrait: 20, landscape: 20, resolution: 5 }
     };
     
     const weight = qualityWeights[videoFile.quality] || { base: 10 };
     let score = weight.base;
     
-    // Portrait bonus
-    if (videoFile.width === 1080 && videoFile.height === 1920) score += weight.portrait;
+    // Format-specific bonus
+    if (videoFormat === 'youtube') {
+      // Landscape bonus for YouTube (1920x1080 or similar)
+      if ((videoFile.width === 1920 && videoFile.height === 1080) || 
+          (videoFile.width > videoFile.height && videoFile.width >= 1280)) {
+        score += weight.landscape || 20;
+      }
+    } else {
+      // Portrait bonus for Shorts (1080x1920)
+      if (videoFile.width === 1080 && videoFile.height === 1920) {
+        score += weight.portrait || 20;
+      }
+    }
+    
     // Resolution bonus
     if (videoFile.width >= 720) score += weight.resolution;
     
     return score;
   }
 
-  selectBestVideoFile(videoFiles) {
+  selectBestVideoFile(videoFiles, videoFormat = 'shorts') {
     return videoFiles.reduce((best, current) => {
-      const currentScore = this.getVideoQualityScore(current);
-      const bestScore = best ? this.getVideoQualityScore(best) : -1;
+      const currentScore = this.getVideoQualityScore(current, videoFormat);
+      const bestScore = best ? this.getVideoQualityScore(best, videoFormat) : -1;
       return currentScore > bestScore ? current : best;
     }, null);
   }
 
-  async searchWithRetry(query, attempt = 1) {
+  async searchWithRetry(query, attempt = 1, orientation = 'portrait') {
     const maxAttempts = 3;
     
     try {
@@ -59,7 +71,7 @@ class PexelsService {
         params: {
           query: query,
           per_page: 15,
-          orientation: 'portrait',
+          orientation: orientation, // Dynamic: 'portrait' for shorts, 'landscape' for youtube
           size: 'large',
           min_duration: 5,
           max_duration: 30 // Daha kısa videolar daha iyi
@@ -72,13 +84,13 @@ class PexelsService {
     } catch (error) {
       if (attempt < maxAttempts && error.response?.status === 429) {
         await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-        return this.searchWithRetry(query, attempt + 1);
+        return this.searchWithRetry(query, attempt + 1, orientation);
       }
       throw error;
     }
   }
 
-  async fetchVideos(topic, count = 3) {
+  async fetchVideos(topic, count = 3, videoFormat = 'shorts') {
     if (!this.apiKey) {
       console.warn('⚠️ Pexels API key not configured');
       return [];
@@ -90,7 +102,9 @@ class PexelsService {
       console.log(`🎬 [Pexels] Searching for: "${topic}"`);
       
       const searchQuery = this.optimizeSearchQuery(topic);
-      console.log(`🔍 [Pexels] Optimized query: "${searchQuery}"`);
+      // Determine orientation based on video format
+      const orientation = videoFormat === 'youtube' ? 'landscape' : 'portrait';
+      console.log(`🔍 [Pexels] Optimized query: "${searchQuery}" (orientation: ${orientation})`);
 
       // Paralel arama stratejileri
       const searchStrategies = [
@@ -101,7 +115,7 @@ class PexelsService {
       ];
 
       const searchPromises = searchStrategies.map(query => 
-        this.searchWithRetry(query).catch(error => {
+        this.searchWithRetry(query, 1, orientation).catch(error => {
           console.warn(`⚠️ [Pexels] Search failed for "${query}":`, error.message);
           return [];
         })
@@ -112,8 +126,8 @@ class PexelsService {
 
       // Fallback search if no results
       if (allVideos.length === 0) {
-        console.log('ℹ️ [Pexels] Trying generic fallback search');
-        allVideos = await this.searchWithRetry('people lifestyle').catch(() => []);
+        console.log(`ℹ️ [Pexels] Trying generic fallback search (${orientation})`);
+        allVideos = await this.searchWithRetry('people lifestyle', 1, orientation).catch(() => []);
       }
 
       if (allVideos.length === 0) {
@@ -124,16 +138,16 @@ class PexelsService {
       // Remove duplicates and prioritize
       const uniqueVideos = [...new Map(allVideos.map(v => [v.id, v])).values()]
         .sort((a, b) => {
-          const aBest = this.selectBestVideoFile(a.video_files);
-          const bBest = this.selectBestVideoFile(b.video_files);
-          return (bBest ? this.getVideoQualityScore(bBest) : 0) - 
-                 (aBest ? this.getVideoQualityScore(aBest) : 0);
+          const aBest = this.selectBestVideoFile(a.video_files, videoFormat);
+          const bBest = this.selectBestVideoFile(b.video_files, videoFormat);
+          return (bBest ? this.getVideoQualityScore(bBest, videoFormat) : 0) - 
+                 (aBest ? this.getVideoQualityScore(aBest, videoFormat) : 0);
         })
         .slice(0, count * 2); // Backup için 2x
 
       // Paralel indirme
       const downloadPromises = uniqueVideos.slice(0, count).map(async (video, index) => {
-        const bestFile = this.selectBestVideoFile(video.video_files);
+        const bestFile = this.selectBestVideoFile(video.video_files, videoFormat);
         if (!bestFile) return null;
 
         try {
@@ -143,7 +157,7 @@ class PexelsService {
           return {
             path: downloadPath,
             duration: Math.min(video.duration || 10, 30), // Max 30 saniye
-            quality: this.getVideoQualityScore(bestFile),
+            quality: this.getVideoQualityScore(bestFile, videoFormat),
             source: 'pexels',
             url: video.url,
             width: bestFile.width,
